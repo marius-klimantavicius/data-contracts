@@ -1,0 +1,650 @@
+using System.Diagnostics;
+using Microsoft.CodeAnalysis.CSharp;
+using Marius.DataContracts.SourceGenerators.DataContracts;
+using Marius.DataContracts.SourceGenerators.Specs;
+
+namespace Marius.DataContracts.SourceGenerators;
+
+/// <summary>
+/// Generates code for CollectionDataContract using Spec classes (free from Roslyn symbols).
+/// </summary>
+internal class CollectionDataContractSpecGenerator : SpecContractGenerator
+{
+    public CollectionDataContractSpec CollectionContract { get; }
+
+    public CollectionDataContractSpecGenerator(CodeWriter writer, DataContractSetSpec contractSet, CollectionDataContractSpec collectionContract)
+        : base(writer, contractSet)
+    {
+        CollectionContract = collectionContract;
+    }
+
+    public override void DeclareDataContract()
+    {
+        AppendLine($"private static global::Marius.DataContracts.Runtime.CollectionDataContract<{CollectionContract.UnderlyingType.FullyQualifiedName}> {CollectionContract.GeneratedName};");
+    }
+
+    public override (string, string?) GenerateDataContract(string xmlDictionary)
+    {
+        AppendLine();
+
+        var collectionType = CollectionContract.UnderlyingType.FullyQualifiedName;
+        AppendLine($"{CollectionContract.GeneratedName} = new global::Marius.DataContracts.Runtime.CollectionDataContract<{collectionType}>");
+        using (Block(end: "};"))
+        {
+            AppendLine($"Id = {SymbolDisplay.FormatPrimitive(CollectionContract.Id, false, false)},");
+            AppendLine($"UnderlyingType = typeof({collectionType}),");
+            AppendLine($"OriginalUnderlyingType = typeof({CollectionContract.OriginalUnderlyingType.FullyQualifiedName}),");
+            AppendLine($"Name = {xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.Name, true)}),");
+            AppendLine($"Namespace = {xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.Namespace, true)}),");
+            AppendLine($"XmlName = new global::System.Xml.XmlQualifiedName({SymbolDisplay.FormatLiteral(CollectionContract.XmlName, true)}, {SymbolDisplay.FormatLiteral(CollectionContract.XmlNamespace, true)}),");
+            AppendLine($"IsPrimitive = {(CollectionContract.IsPrimitive ? "true" : "false")},");
+            AppendLine($"IsReference = {(CollectionContract.IsReference ? "true" : "false")},");
+            AppendLine($"IsISerializable = {(CollectionContract.IsISerializable ? "true" : "false")},");
+            AppendLine($"HasRoot = {(CollectionContract.HasRoot ? "true" : "false")},");
+            AppendLine($"CanContainReferences = {(CollectionContract.CanContainReferences ? "true" : "false")},");
+            AppendLine($"IsBuiltInDataContract = {(CollectionContract.IsBuiltInDataContract ? "true" : "false")},");
+
+            if (CollectionContract.TopLevelElementName == null)
+                AppendLine("TopLevelElementName = null,");
+            else
+                AppendLine($"TopLevelElementName = {xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.TopLevelElementName, true)}),");
+
+            if (CollectionContract.TopLevelElementNamespace == null)
+                AppendLine("TopLevelElementNamespace = null,");
+            else
+                AppendLine($"TopLevelElementNamespace = {xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.TopLevelElementNamespace, true)}),");
+
+            AppendLine($"ItemType = typeof({CollectionContract.ItemType.FullyQualifiedName}),");
+            AppendLine($"CollectionItemName = {xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.CollectionItemName, true)}),");
+            AppendLine($"ChildElementNamespace = {(CollectionContract.ChildElementNamespace is null ? "null" : $"{xmlDictionary}.Add({SymbolDisplay.FormatLiteral(CollectionContract.ChildElementNamespace, true)})")},");
+            AppendLine("Read = static (xmlReader, context, itemName, itemNamespace) =>");
+            using (Block(end: "},"))
+            {
+                ReadCollection();
+            }
+
+            AppendLine("ReadGetOnly = static (xmlReader, context, itemName, itemNamespace) =>");
+            using (Block(end: "},"))
+            {
+                ReadGetOnlyCollection();
+            }
+
+            AppendLine("Write = static (xmlWriter, context, obj) =>");
+            using (Block(end: "},"))
+            {
+                WriteCollection();
+            }
+        }
+
+        return (CollectionContract.GeneratedName, null);
+    }
+
+    public override void GenerateDependencies(string xmlDictionary)
+    {
+        AppendLine($"{CollectionContract.GeneratedName}.ItemContract = {GetContract(CollectionContract.ItemContractId)?.GeneratedName};");
+
+        if (CollectionContract.KnownDataContracts.Length > 0)
+        {
+            var dictionary = LocalName("__knownTypes");
+
+            AppendLine($"var {dictionary} = new global::System.Collections.Generic.Dictionary<global::System.Xml.XmlQualifiedName, global::Marius.DataContracts.Runtime.DataContract>();");
+            foreach (var item in CollectionContract.KnownDataContracts)
+            {
+                var knownContract = GetContract(item.ContractId);
+                Debug.Assert(knownContract != null);
+
+                AppendLine($"{dictionary}.TryAdd({knownContract.GeneratedName}.XmlName, {knownContract.GeneratedName});");
+            }
+
+            AppendLine($"{CollectionContract.GeneratedName}.KnownDataContracts = global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary({dictionary});");
+        }
+
+        if (CollectionContract.BaseContractId >= 0)
+            AppendLine($"{CollectionContract.GeneratedName}.BaseContract = {GetContract(CollectionContract.BaseContractId)!.GeneratedName};");
+    }
+
+    private void ReadCollection()
+    {
+        var type = CollectionContract.UnderlyingType;
+        var itemType = CollectionContract.ItemType;
+        var isArray = CollectionContract.CollectionKind == CollectionKind.Array;
+        var effectiveType = type;
+
+        if (type.TypeKind == TypeKindSpec.Interface)
+        {
+            switch (CollectionContract.CollectionKind)
+            {
+                case CollectionKind.GenericDictionary:
+                    effectiveType = CreateDictionaryType(itemType);
+                    break;
+                case CollectionKind.Dictionary:
+                    effectiveType = CreateObjectDictionaryType();
+                    break;
+                case CollectionKind.Collection:
+                case CollectionKind.GenericCollection:
+                case CollectionKind.Enumerable:
+                case CollectionKind.GenericEnumerable:
+                case CollectionKind.List:
+                case CollectionKind.GenericList:
+                    effectiveType = CreateArrayType(itemType);
+                    isArray = true;
+                    break;
+            }
+        }
+
+        var itemName = CollectionContract.ItemName;
+        var itemNs = CollectionContract.XmlNamespace;
+
+        var objectLocal = LocalName("__value");
+        AppendLine($"var {objectLocal} = default({effectiveType.FullyQualifiedName});");
+        if (!isArray)
+        {
+            if (!effectiveType.IsValueType)
+            {
+                AppendLine($"{objectLocal} = new {effectiveType.FullyQualifiedName}();");
+                AppendLine($"context.AddNewObject({objectLocal});");
+            }
+        }
+
+        var size = LocalName("__count");
+        AppendLine($"var {size} = context.GetArraySize();");
+
+        var objectId = LocalName("__objectId");
+        AppendLine($"var {objectId} = context.GetObjectId();");
+
+        var canReadPrimitiveArray = false;
+        var tryReadArrayIfBlock = default(CodeWriter.IndentDisposable);
+        if (isArray && TryReadPrimitiveArray(itemType, size, objectLocal, out var condition))
+        {
+            canReadPrimitiveArray = true;
+            AppendLine($"if (!{condition})");
+            tryReadArrayIfBlock = Block();
+        }
+
+        AppendLine();
+        AppendLine($"if ({size} == -1)");
+        using (Block())
+        {
+            var growingCollection = default(string);
+            if (isArray)
+            {
+                growingCollection = LocalName("__array");
+                AppendLine($"var {growingCollection} = new {itemType.FullyQualifiedName}[32];");
+            }
+
+            var iterator = LocalName("__i");
+            AppendLine($"var {iterator} = 0;");
+            AppendLine($"for ({iterator} = 0; {iterator} < int.MaxValue; {iterator}++)");
+            using (Block())
+            {
+                AppendLine($"if (xmlReader.IsStartElement(itemName, itemNamespace))");
+                using (Block())
+                {
+                    AppendLine("context.IncrementItemCount(1);");
+                    var value = ReadCollectionItem(itemType, itemName, itemNs);
+                    if (isArray)
+                    {
+                        AppendLine($"{growingCollection} = global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.EnsureArraySize<{itemType.FullyQualifiedName}>({growingCollection}, {iterator});");
+                        AppendLine($"{growingCollection}[{iterator}] = {value};");
+                    }
+                    else
+                    {
+                        StoreCollectionValue(objectLocal, value, itemType);
+                    }
+                }
+
+                AppendLine("else");
+                using (Block())
+                {
+                    AppendLine("if (xmlReader.NodeType == global::System.Xml.XmlNodeType.EndElement)");
+                    using (Block())
+                        AppendLine("break;");
+
+                    AppendLine("else");
+                    using (Block())
+                        HandleUnexpectedItemInCollection(iterator);
+                }
+            }
+
+            if (isArray)
+            {
+                AppendLine();
+                AppendLine($"{objectLocal} = global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.TrimArraySize({growingCollection}, {iterator});");
+                AppendLine($"context.AddNewObjectWithId({objectId}, {objectLocal});");
+            }
+        }
+
+        AppendLine("else");
+        using (Block())
+        {
+            AppendLine($"context.IncrementItemCount({size});");
+            if (isArray)
+            {
+                AppendLine($"{objectLocal} = new {itemType.FullyQualifiedName}[{size}];");
+                AppendLine($"context.AddNewObject({objectLocal});");
+            }
+
+            AppendLine();
+            var j = LocalName("__j");
+            AppendLine($"var {j} = 0;");
+            AppendLine($"for ({j} = 0; {j} < {size}; {j}++)");
+            using (Block())
+            {
+                AppendLine($"if (xmlReader.IsStartElement(itemName, itemNamespace))");
+                using (Block())
+                {
+                    var itemValue = ReadCollectionItem(itemType, itemName, itemNs);
+                    if (isArray)
+                        AppendLine($"{objectLocal}[{j}] = {itemValue};");
+                    else
+                        StoreCollectionValue(objectLocal, itemValue, itemType);
+                }
+
+                AppendLine("else");
+                using (Block())
+                    HandleUnexpectedItemInCollection(j);
+            }
+
+            AppendLine();
+            AppendLine($"context.CheckEndOfArray(xmlReader, {size}, itemName, itemNamespace);");
+        }
+
+        if (canReadPrimitiveArray)
+        {
+            tryReadArrayIfBlock.Dispose();
+            AppendLine("else");
+            using (Block())
+                AppendLine($"context.AddNewObjectWithId({objectId}, {objectLocal});");
+        }
+
+        AppendLine();
+        AppendLine($"return {objectLocal};");
+    }
+
+    private void ReadGetOnlyCollection()
+    {
+        var type = CollectionContract.UnderlyingType;
+        var itemType = CollectionContract.ItemType;
+        var isArray = CollectionContract.CollectionKind == CollectionKind.Array;
+        var itemName = CollectionContract.ItemName;
+        var itemNs = CollectionContract.XmlNamespace;
+
+        var objectLocal = LocalName("__value");
+        AppendLine($"var {objectLocal} = ({type.FullyQualifiedName})context.GetCollectionMember();");
+        AppendLine("if (xmlReader.IsStartElement(itemName, itemNamespace))");
+        using (Block())
+        {
+            AppendLine($"if ({objectLocal} is null)");
+            using (Block())
+            {
+                AppendLine($"global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.ThrowNullValueReturnedForGetOnlyCollectionException(typeof({type.FullyQualifiedName}));");
+            }
+
+            AppendLine("else");
+            using (Block())
+            {
+                var size = LocalName("__count");
+                if (isArray)
+                    AppendLine($"var {size} = {objectLocal}.Length;");
+                else
+                    AppendLine($"var {size} = 0;");
+
+                AppendLine($"context.AddNewObject({objectLocal});");
+                AppendLine();
+
+                var i = LocalName("__i");
+                AppendLine($"for (var {i} = 0; {i} < int.MaxValue; {i}++)");
+                using (Block())
+                {
+                    AppendLine("if (xmlReader.IsStartElement(itemName, itemNamespace))");
+                    using (Block())
+                    {
+                        AppendLine("context.IncrementItemCount(1);");
+                        var value = ReadCollectionItem(itemType, itemName, itemNs);
+                        if (isArray)
+                        {
+                            AppendLine($"if ({size} == {i})");
+                            using (Block())
+                                AppendLine($"global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.ThrowArrayExceededSizeException({size}, typeof({type.FullyQualifiedName}));");
+                            AppendLine("else");
+                            using (Block())
+                                AppendLine($"{objectLocal}[{i}] = {value};");
+                        }
+                        else
+                        {
+                            StoreCollectionValue(objectLocal, value, itemType);
+                        }
+                    }
+
+                    AppendLine("else");
+                    using (Block())
+                    {
+                        AppendLine("if (xmlReader.NodeType == global::System.Xml.XmlNodeType.EndElement)");
+                        using (Block())
+                            AppendLine("break;");
+
+                        AppendLine("else");
+                        using (Block())
+                            HandleUnexpectedItemInCollection(i);
+                    }
+                }
+
+                AppendLine();
+                AppendLine($"context.CheckEndOfArray(xmlReader, {size}, itemName, itemNamespace);");
+            }
+        }
+    }
+
+    private void StoreCollectionValue(string collection, string value, TypeSpec valueType)
+    {
+        if (CollectionContract.CollectionKind == CollectionKind.GenericDictionary || CollectionContract.CollectionKind == CollectionKind.Dictionary)
+        {
+            var keyValuePairContract = GetContract(CollectionContract.ItemContractId) as ClassDataContractSpec;
+            if (keyValuePairContract == null || keyValuePairContract.Members.Length < 2)
+            {
+                // Diagnostic DCS3005 is reported during parsing
+                AppendLine($"throw new global::System.Runtime.Serialization.InvalidDataContractException(\"Failed to get KeyValuePair contract for dictionary type '{CollectionContract.UnderlyingType.FullyQualifiedName}'.\");");
+                return;
+            }
+
+            var keyMember = keyValuePairContract.Members[0];
+            var valueMember = keyValuePairContract.Members[1];
+
+            var pairKey = LocalName("__key");
+            var pairValue = LocalName("__value");
+
+            AppendLine($"var {pairKey} = {GetMemberValue(value, valueType, keyMember.MemberInfo)};");
+            AppendLine($"var {pairValue} = {GetMemberValue(value, valueType, valueMember.MemberInfo)};");
+
+            if (!CollectionContract.HasAddMethod)
+            {
+                if (CollectionContract.CollectionKind == CollectionKind.GenericDictionary)
+                    AppendLine($"((global::System.Collections.Generic.IDictionary<{CollectionContract.ItemType.TypeArguments[0].FullyQualifiedName}, {CollectionContract.ItemType.TypeArguments[1].FullyQualifiedName}>){collection}).Add({pairKey}, {pairValue});");
+                else
+                    AppendLine($"((global::System.Collections.IDictionary){collection}).Add({pairKey}, {pairValue});");
+            }
+            else
+            {
+                AppendLine($"{collection}.Add({pairKey}, {pairValue});");
+            }
+        }
+        else
+        {
+            if (!CollectionContract.HasAddMethod)
+            {
+                if (CollectionContract.CollectionKind == CollectionKind.GenericCollection || CollectionContract.CollectionKind == CollectionKind.GenericList)
+                    AppendLine($"((global::System.Collections.Generic.ICollection<{valueType.FullyQualifiedName}>){collection}).Add({value});");
+                else
+                    AppendLine($"((global::System.Collections.IList){collection}).Add({value});");
+            }
+            else
+            {
+                AppendLine($"{collection}.Add({value});");
+            }
+        }
+    }
+
+    private void HandleUnexpectedItemInCollection(string iterator)
+    {
+        AppendLine("if (xmlReader.IsStartElement())");
+        using (Block())
+        {
+            AppendLine("context.SkipUnknownElement(xmlReader);");
+            AppendLine($"{iterator}--;");
+        }
+
+        AppendLine("else");
+        using (Block())
+            AppendLine("ThrowUnexpectedStateException(global::System.Xml.XmlNodeType.Element, xmlReader);");
+    }
+
+    private string ReadCollectionItem(TypeSpec itemType, string itemName, string itemNs)
+    {
+        if (CollectionContract.CollectionKind == CollectionKind.Dictionary || CollectionContract.CollectionKind == CollectionKind.GenericDictionary)
+        {
+            var itemContract = GetContract(CollectionContract.ItemContractId);
+            var value = LocalName("__value");
+            AppendLine($"var {value} = ({itemType.FullyQualifiedName}){itemContract?.GeneratedName}.ReadXmlValue(xmlReader, context);");
+            return value;
+        }
+
+        var contract = GetContract(CollectionContract.ItemContractId);
+        return ReadValue(itemType, contract, itemName, itemNs, false);
+    }
+
+    private bool TryReadPrimitiveArray(TypeSpec itemType, string size, string objectLocal, out string? condition)
+    {
+        condition = null;
+
+        string? readArrayMethod = null;
+        switch (itemType.SpecialType)
+        {
+            case SpecialTypeKind.Boolean:
+                readArrayMethod = "TryReadBooleanArray";
+                break;
+            case SpecialTypeKind.DateTime:
+                readArrayMethod = "TryReadDateTimeArray";
+                break;
+            case SpecialTypeKind.Decimal:
+                readArrayMethod = "TryReadDecimalArray";
+                break;
+            case SpecialTypeKind.Int32:
+                readArrayMethod = "TryReadInt32Array";
+                break;
+            case SpecialTypeKind.Int64:
+                readArrayMethod = "TryReadInt64Array";
+                break;
+            case SpecialTypeKind.Single:
+                readArrayMethod = "TryReadSingleArray";
+                break;
+            case SpecialTypeKind.Double:
+                readArrayMethod = "TryReadDoubleArray";
+                break;
+        }
+
+        if (readArrayMethod != null)
+        {
+            condition = LocalName("__tryRead");
+            AppendLine($"var {condition} = xmlReader.{readArrayMethod}(context, itemName, itemNamespace, {size}, out {objectLocal});");
+            return true;
+        }
+
+        return false;
+    }
+
+    private void WriteCollection()
+    {
+        var itemNamespace = LocalName("__itemNamespace");
+        AppendLine($"var {itemNamespace} = {CollectionContract.GeneratedName}.Namespace;");
+
+        var itemName = LocalName("__itemName");
+        AppendLine($"var {itemName} = {CollectionContract.GeneratedName}.CollectionItemName;");
+
+        if (CollectionContract.ChildElementNamespace != null)
+        {
+            AppendLine();
+            AppendLine($"xmlWriter.WriteNamespaceDecl({CollectionContract.GeneratedName}.ChildElementNamespace);");
+        }
+
+        if (CollectionContract.CollectionKind == CollectionKind.Array)
+        {
+            AppendLine();
+            AppendLine("context.IncrementArrayCount(xmlWriter, obj);");
+            if (!TryWritePrimitiveArray("obj", itemName, itemNamespace))
+            {
+                var i = LocalName("__i");
+                AppendLine($"for (var {i} = 0; {i} < obj.Length; {i}++)");
+                using (Block())
+                {
+                    if (!TryWritePrimitive($"obj[{i}]", itemNamespace, itemName))
+                    {
+                        WriteStartElement(CollectionContract.ItemType, CollectionContract.Namespace, null, itemNamespace, itemName, 0);
+                        AppendLine();
+
+                        var memberValue = LocalName("__memberValue");
+                        AppendLine($"var {memberValue} = obj[{i}];");
+                        WriteValue(memberValue, CollectionContract.ItemType, GetContract(CollectionContract.ItemContractId)!, false);
+
+                        AppendLine("xmlWriter.WriteEndElement();");
+                    }
+                }
+            }
+        }
+        else
+        {
+            AppendLine();
+            switch (CollectionContract.CollectionKind)
+            {
+                case CollectionKind.Collection:
+                case CollectionKind.List:
+                case CollectionKind.Dictionary:
+                    AppendLine("context.IncrementCollectionCount(xmlWriter, obj);");
+                    break;
+                case CollectionKind.GenericCollection:
+                case CollectionKind.GenericList:
+                case CollectionKind.GenericDictionary:
+                    AppendLine("context.IncrementCollectionCountGeneric(xmlWriter, obj);");
+                    break;
+            }
+
+            var elementType = CollectionContract.CollectionElementType!;
+            AppendLine();
+
+            var memberTypeLocal = default(string);
+            if (CollectionContract.CollectionKind != CollectionKind.Dictionary && CollectionContract.CollectionKind != CollectionKind.GenericDictionary)
+            {
+                memberTypeLocal = LocalName("__memberType");
+                AppendLine($"var {memberTypeLocal} = typeof({CollectionContract.ItemType.FullyQualifiedName}).TypeHandle;");
+            }
+
+            var item = LocalName("__item");
+            AppendLine($"foreach (var {item} in obj)");
+            using (Block())
+            {
+                AppendLine("context.IncrementItemCount(1);");
+                WriteStartElement(elementType, CollectionContract.Namespace, null, itemNamespace, itemName, 0);
+
+                var itemContract = GetContract(CollectionContract.ItemContractId)!;
+                if (CollectionContract.CollectionKind == CollectionKind.Dictionary || CollectionContract.CollectionKind == CollectionKind.GenericDictionary)
+                {
+                    var kv = LocalName("__kv");
+                    AppendLine($"var {kv} = global::Marius.DataContracts.Runtime.KeyValue.Create({item}.Key, {item}.Value);");
+                    AppendLine($"{itemContract.GeneratedName}.WriteXmlValue(xmlWriter, {kv}, context);");
+                }
+                else
+                {
+                    WriteValue(item, CollectionContract.ItemType, itemContract, false, memberTypeLocal);
+                }
+
+                AppendLine("xmlWriter.WriteEndElement();");
+            }
+        }
+    }
+
+    private bool TryWritePrimitive(string value, string itemNamespace, string itemName)
+    {
+        var primitiveContract = GetContract(CollectionContract.ItemContractId) as PrimitiveDataContractSpec;
+        if (primitiveContract == null || primitiveContract.UnderlyingType.SpecialType == SpecialTypeKind.Object)
+            return false;
+
+        WritePrimitive(primitiveContract, value, itemNamespace, itemName);
+        return true;
+    }
+
+    private bool TryWritePrimitiveArray(string value, string itemName, string itemNamespace)
+    {
+        var primitiveContract = GetContract(CollectionContract.ItemContractId) as PrimitiveDataContractSpec;
+        if (primitiveContract is null)
+            return false;
+
+        switch (CollectionContract.ItemType.SpecialType)
+        {
+            case SpecialTypeKind.Boolean:
+                AppendLine($"xmlWriter.WriteBooleanArray({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.DateTime:
+                AppendLine($"xmlWriter.WriteDateTimeArray({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.Decimal:
+                AppendLine($"xmlWriter.WriteDecimalArray({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.Int32:
+                AppendLine($"xmlWriter.WriteInt32Array({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.Int64:
+                AppendLine($"xmlWriter.WriteInt64Array({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.Single:
+                AppendLine($"xmlWriter.WriteSingleArray({value}, {itemName}, {itemNamespace});");
+                return true;
+            case SpecialTypeKind.Double:
+                AppendLine($"xmlWriter.WriteDoubleArray({value}, {itemName}, {itemNamespace});");
+                return true;
+        }
+
+        return false;
+    }
+
+    // Helper methods to create synthetic types for interface implementations
+    private TypeSpec CreateDictionaryType(TypeSpec itemType)
+    {
+        // Extract key and value types from KeyValuePair
+        var keyType = itemType.TypeArguments.Length > 0 ? itemType.TypeArguments[0] : itemType;
+        var valueType = itemType.TypeArguments.Length > 1 ? itemType.TypeArguments[1] : itemType;
+
+        return new TypeSpec
+        {
+            FullyQualifiedName = $"global::System.Collections.Generic.Dictionary<{keyType.FullyQualifiedName}, {valueType.FullyQualifiedName}>",
+            Name = "Dictionary",
+            Namespace = "System.Collections.Generic",
+            IsValueType = false,
+            IsNullableValueType = false,
+            IsGenericType = true,
+            IsOpenGenericType = false,
+            IsArray = false,
+            IsTypeSerializable = true,
+            SpecialType = SpecialTypeKind.None,
+            IsAbstract = false,
+            TypeKind = TypeKindSpec.Class,
+        };
+    }
+
+    private TypeSpec CreateObjectDictionaryType()
+    {
+        return new TypeSpec
+        {
+            FullyQualifiedName = "global::System.Collections.Generic.Dictionary<object, object>",
+            Name = "Dictionary",
+            Namespace = "System.Collections.Generic",
+            IsValueType = false,
+            IsNullableValueType = false,
+            IsGenericType = true,
+            IsOpenGenericType = false,
+            IsArray = false,
+            IsTypeSerializable = true,
+            SpecialType = SpecialTypeKind.None,
+            IsAbstract = false,
+            TypeKind = TypeKindSpec.Class,
+        };
+    }
+
+    private TypeSpec CreateArrayType(TypeSpec elementType)
+    {
+        return new TypeSpec
+        {
+            FullyQualifiedName = $"{elementType.FullyQualifiedName}[]",
+            Name = $"{elementType.Name}[]",
+            Namespace = elementType.Namespace,
+            IsValueType = false,
+            IsNullableValueType = false,
+            IsGenericType = false,
+            IsOpenGenericType = false,
+            IsArray = true,
+            IsTypeSerializable = true,
+            SpecialType = SpecialTypeKind.None,
+            TypeKind = TypeKindSpec.Array,
+            IsAbstract = false,
+            ElementType = elementType,
+        };
+    }
+}
