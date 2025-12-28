@@ -1,9 +1,9 @@
 using System.Diagnostics;
-using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.DataContracts;
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis.CSharp;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 /// <summary>
 /// Generates code for CollectionDataContract using Spec classes (free from Roslyn symbols).
@@ -93,7 +93,7 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
                 var knownContract = GetContract(item.ContractId);
                 Debug.Assert(knownContract != null);
 
-                AppendLine($"{dictionary}.TryAdd({knownContract.GeneratedName}.XmlName, {knownContract.GeneratedName});");
+                AppendLine($"{dictionary}.TryAdd({knownContract!.GeneratedName}.XmlName, {knownContract.GeneratedName});");
             }
 
             AppendLine($"{CollectionContract.GeneratedName}.KnownDataContracts = global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary({dictionary});");
@@ -112,21 +112,15 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
 
         if (type.TypeKind == TypeKindSpec.Interface)
         {
+            effectiveType = CollectionContract.EffectiveType!;
             switch (CollectionContract.CollectionKind)
             {
-                case CollectionKind.GenericDictionary:
-                    effectiveType = CreateDictionaryType(itemType);
-                    break;
-                case CollectionKind.Dictionary:
-                    effectiveType = CreateObjectDictionaryType();
-                    break;
                 case CollectionKind.Collection:
                 case CollectionKind.GenericCollection:
                 case CollectionKind.Enumerable:
                 case CollectionKind.GenericEnumerable:
                 case CollectionKind.List:
                 case CollectionKind.GenericList:
-                    effectiveType = CreateArrayType(itemType);
                     isArray = true;
                     break;
             }
@@ -583,68 +577,5 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
         }
 
         return false;
-    }
-
-    // Helper methods to create synthetic types for interface implementations
-    private TypeSpec CreateDictionaryType(TypeSpec itemType)
-    {
-        // Extract key and value types from KeyValuePair
-        var keyType = itemType.TypeArguments.Length > 0 ? itemType.TypeArguments[0] : itemType;
-        var valueType = itemType.TypeArguments.Length > 1 ? itemType.TypeArguments[1] : itemType;
-
-        return new TypeSpec
-        {
-            FullyQualifiedName = $"global::System.Collections.Generic.Dictionary<{keyType.FullyQualifiedName}, {valueType.FullyQualifiedName}>",
-            Name = "Dictionary",
-            Namespace = "System.Collections.Generic",
-            IsValueType = false,
-            IsNullableValueType = false,
-            IsGenericType = true,
-            IsOpenGenericType = false,
-            IsArray = false,
-            IsTypeSerializable = true,
-            SpecialType = SpecialTypeKind.None,
-            IsAbstract = false,
-            TypeKind = TypeKindSpec.Class,
-        };
-    }
-
-    private TypeSpec CreateObjectDictionaryType()
-    {
-        return new TypeSpec
-        {
-            FullyQualifiedName = "global::System.Collections.Generic.Dictionary<object, object>",
-            Name = "Dictionary",
-            Namespace = "System.Collections.Generic",
-            IsValueType = false,
-            IsNullableValueType = false,
-            IsGenericType = true,
-            IsOpenGenericType = false,
-            IsArray = false,
-            IsTypeSerializable = true,
-            SpecialType = SpecialTypeKind.None,
-            IsAbstract = false,
-            TypeKind = TypeKindSpec.Class,
-        };
-    }
-
-    private TypeSpec CreateArrayType(TypeSpec elementType)
-    {
-        return new TypeSpec
-        {
-            FullyQualifiedName = $"{elementType.FullyQualifiedName}[]",
-            Name = $"{elementType.Name}[]",
-            Namespace = elementType.Namespace,
-            IsValueType = false,
-            IsNullableValueType = false,
-            IsGenericType = false,
-            IsOpenGenericType = false,
-            IsArray = true,
-            IsTypeSerializable = true,
-            SpecialType = SpecialTypeKind.None,
-            TypeKind = TypeKindSpec.Array,
-            IsAbstract = false,
-            ElementType = elementType,
-        };
     }
 }

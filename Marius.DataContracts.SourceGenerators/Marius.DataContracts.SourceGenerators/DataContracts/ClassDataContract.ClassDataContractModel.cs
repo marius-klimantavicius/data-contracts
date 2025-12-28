@@ -378,7 +378,9 @@ internal partial class ClassDataContract
             Interlocked.MemoryBarrier();
             _members = tempMembers;
             Debug.Assert(Members != null);
+#pragma warning disable CS8774 // Member must have a non-null value when exiting.
         }
+#pragma warning restore CS8774 // Member must have a non-null value when exiting.
 
         private void SetIfMembersHaveConflict(List<DataMember> members)
         {
@@ -557,24 +559,25 @@ internal partial class ClassDataContract
             {
                 Debug.Assert(method.ContainingType != null);
 
+                var methodContainingType = method.ContainingType!;
                 if (currentCallback != null)
                 {
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateCallback, method, currentCallback, DataContractContext.GetClrTypeFullName(method.ContainingType), hasAttributeCheck.FullAttributeName));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateCallback, method, currentCallback, DataContractContext.GetClrTypeFullName(methodContainingType), hasAttributeCheck.FullAttributeName));
                 }
                 else if (prevAttributeType != null)
                 {
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateAttribute, prevAttributeType, hasAttributeCheck.FullAttributeName, DataContractContext.GetClrTypeFullName(method.ContainingType), method));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateAttribute, prevAttributeType, hasAttributeCheck.FullAttributeName, DataContractContext.GetClrTypeFullName(methodContainingType), method));
                 }
                 else if (method.IsVirtual)
                 {
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbacksCannotBeVirtualMethods, method, DataContractContext.GetClrTypeFullName(method.ContainingType), hasAttributeCheck.FullAttributeName));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbacksCannotBeVirtualMethods, method, DataContractContext.GetClrTypeFullName(methodContainingType), hasAttributeCheck.FullAttributeName));
                 }
                 else
                 {
                     if (method.ReturnType.SpecialType != SpecialType.System_Void)
-                        DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackMustReturnVoid, DataContractContext.GetClrTypeFullName(method.ContainingType), method));
+                        DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackMustReturnVoid, DataContractContext.GetClrTypeFullName(methodContainingType), method));
                     if (parameters == null || parameters.Length != 1 || !Context.KnownSymbols.IsStreamingContext(parameters[0].Type))
-                        DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackParameterInvalid, DataContractContext.GetClrTypeFullName(method.ContainingType), method, "System.Runtime.Serialization.StreamingContext"));
+                        DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackParameterInvalid, DataContractContext.GetClrTypeFullName(methodContainingType), method, "System.Runtime.Serialization.StreamingContext"));
 
                     prevAttributeType = hasAttributeCheck.FullAttributeName;
                 }
@@ -591,12 +594,13 @@ internal partial class ClassDataContract
             {
                 Debug.Assert(method.ContainingType != null);
 
+                var methodContainingType = method.ContainingType!;
                 if (_extensionDataSetMethod != null)
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateExtensionDataSetMethod, method, _extensionDataSetMethod, DataContractContext.GetClrTypeFullName(method.ContainingType)));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateExtensionDataSetMethod, method, _extensionDataSetMethod, DataContractContext.GetClrTypeFullName(methodContainingType)));
                 if (method.ReturnType.SpecialType == SpecialType.System_Void)
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.ExtensionDataSetMustReturnVoid, DataContractContext.GetClrTypeFullName(method.ContainingType), method));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.ExtensionDataSetMustReturnVoid, DataContractContext.GetClrTypeFullName(methodContainingType), method));
                 if (parameters == null || parameters.Length != 1 || !Context.KnownSymbols.IsExtensionDataObject(parameters[0].Type))
-                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.ExtensionDataSetParameterInvalid, DataContractContext.GetClrTypeFullName(method.ContainingType), method, "System.Runtime.Serialization.ExtensionDataObject"));
+                    DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.ExtensionDataSetParameterInvalid, DataContractContext.GetClrTypeFullName(methodContainingType), method, "System.Runtime.Serialization.ExtensionDataObject"));
                 return true;
             }
 

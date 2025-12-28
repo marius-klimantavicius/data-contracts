@@ -1,8 +1,7 @@
-using System.Diagnostics;
-using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis.CSharp;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 /// <summary>
 /// Base class for contract generators that work with Spec classes (free from Roslyn symbols).
@@ -105,8 +104,7 @@ internal abstract class SpecContractGenerator
                     }
                     else
                     {
-                        Debug.Assert(dataContract != null);
-                        AppendLine($"{value} = context.Read<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract.GeneratedName});");
+                        AppendLine($"{value} = context.Read<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract?.GeneratedName ?? "null"});");
                     }
                 }
 
@@ -131,8 +129,7 @@ internal abstract class SpecContractGenerator
         }
         else
         {
-            Debug.Assert(dataContract != null);
-            AppendLine($"{value} = context.Read<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract.GeneratedName});");
+            AppendLine($"{value} = context.Read<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract?.GeneratedName ?? "null"});");
         }
 
         return value;

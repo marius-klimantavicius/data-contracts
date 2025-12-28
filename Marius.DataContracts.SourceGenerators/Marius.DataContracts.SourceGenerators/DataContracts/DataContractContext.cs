@@ -632,7 +632,7 @@ internal partial class DataContractContext
                 }
 
                 Debug.Assert(value.Value is ITypeSymbol);
-                return (ITypeSymbol)value.Value;
+                return (ITypeSymbol)value.Value!;
             }
 
             throw new NotSupportedException();

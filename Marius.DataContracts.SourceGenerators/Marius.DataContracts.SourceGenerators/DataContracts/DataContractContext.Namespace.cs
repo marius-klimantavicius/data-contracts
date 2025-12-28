@@ -90,13 +90,9 @@ internal partial class DataContractContext
 
         if (Uri.TryCreate(dataContractNs, UriKind.RelativeOrAbsolute, out var uri))
         {
-            Span<char> formatted = stackalloc char[SerializationNamespace.Length];
-            if (uri.TryFormat(formatted, out var charsWritten) &&
-                charsWritten == SerializationNamespace.Length &&
-                formatted.SequenceEqual(SerializationNamespace))
-            {
+            var formatted = uri.ToString();
+            if (formatted == SerializationNamespace) 
                 ThrowInvalidDataContractException(SR.Format(SR.DataContractNamespaceReserved, SerializationNamespace));
-            }
         }
         else
         {
@@ -162,10 +158,10 @@ internal partial class DataContractContext
     {
         const int digestLen = 6;
         var namespaceBytes = Encoding.UTF8.GetBytes(namespaces);
-        Span<byte> digestBytes = stackalloc byte[digestLen];
+        var digestBytes = new byte[digestLen];
         ComputeHash(namespaceBytes, digestBytes);
-        Span<char> digestChars = stackalloc char[24];
-        Convert.TryToBase64Chars(digestBytes, digestChars, out var digestCharsLen);
+        var digestChars = new char[24];
+        var digestCharsLen = Convert.ToBase64CharArray(digestBytes, 0, digestBytes.Length, digestChars, 0);
         var digest = new StringBuilder();
         for (var i = 0; i < digestCharsLen; i++)
         {

@@ -42,7 +42,7 @@ public abstract partial class DataContract
             set
             {
                 Debug.Assert(value != null);
-                Name = value;
+                Name = value!;
             }
         }
  
@@ -53,7 +53,7 @@ public abstract partial class DataContract
             set
             {
                 Debug.Assert(value != null);
-                Namespace = value;
+                Namespace = value!;
             }
         }
         

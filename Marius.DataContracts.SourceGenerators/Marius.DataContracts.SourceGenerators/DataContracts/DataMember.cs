@@ -28,8 +28,8 @@ internal class DataMember
         {
             if (_memberType == null)
             {
-                if (MemberInfo is IFieldSymbol field)
-                    _memberType = field.Type;
+                if (MemberInfo is IFieldSymbol @field)
+                    _memberType = @field.Type;
                 else if (MemberInfo is IPropertySymbol property)
                     _memberType = property.Type;
                 else

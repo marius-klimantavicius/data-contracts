@@ -1,3 +1,5 @@
+using Marius.DataContracts.SourceGenerators.Generators;
+
 namespace Marius.DataContracts.SourceGenerators.Specs;
 
 /// <summary>

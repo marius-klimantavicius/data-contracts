@@ -148,7 +148,7 @@ internal partial class DataContractContext
         if (type is INamedTypeSymbol namedType && namedType.IsGenericType)
         {
             typeName = $"{typeName}`{namedType.TypeArguments.Length}";
-            
+
             var localName = new StringBuilder();
             var namespaces = new StringBuilder();
             var parametersFromBuiltInNamespaces = true;
@@ -229,11 +229,11 @@ internal partial class DataContractContext
             startIndex = typeName.IndexOf('.', endIndex);
             if (startIndex < 0)
             {
-                nestedParamCounts.Add(int.Parse(typeName.AsSpan(endIndex + 1), provider: CultureInfo.InvariantCulture));
+                nestedParamCounts.Add(int.Parse(typeName.Substring(endIndex + 1), provider: CultureInfo.InvariantCulture));
                 break;
             }
 
-            nestedParamCounts.Add(int.Parse(typeName.AsSpan(endIndex + 1, startIndex - endIndex - 1), provider: CultureInfo.InvariantCulture));
+            nestedParamCounts.Add(int.Parse(typeName.Substring(endIndex + 1, startIndex - endIndex - 1), provider: CultureInfo.InvariantCulture));
         }
 
         localName?.Append("Of");
@@ -309,17 +309,21 @@ internal partial class DataContractContext
     {
         if (localName.Length == 0)
             return false;
-        if (!char.IsAsciiLetter(localName[0]))
+        if (!IsAsciiLetter(localName[0]))
             return false;
 
         for (var i = 1; i < localName.Length; i++)
         {
             var ch = localName[i];
-            if (!char.IsAsciiLetterOrDigit(ch))
+            if (!IsAsciiLetterOrDigit(ch))
                 return false;
         }
 
         return true;
+
+        static bool IsAsciiLetter(char c) => (uint)((c | 0x20) - 'a') <= 'z' - 'a';
+        static bool IsAsciiLetterOrDigit(char c) => IsAsciiLetter(c) | IsBetween(c, '0', '9');
+        static bool IsBetween(char c, char minInclusive, char maxInclusive) => (uint)(c - minInclusive) <= (uint)(maxInclusive - minInclusive);
     }
 
     internal static string EncodeLocalName(string localName)
@@ -330,7 +334,7 @@ internal partial class DataContractContext
         if (IsValidNCName(localName))
             return localName;
 
-        return XmlConvert.EncodeLocalName(localName);
+        return XmlConvert.EncodeLocalName(localName)!;
     }
 
     internal static bool IsValidNCName(string name)
@@ -388,7 +392,7 @@ internal partial class DataContractContext
                 }
                 else
                 {
-                    if (!int.TryParse(format.AsSpan(start, i - start), out var paramIndex) || paramIndex < 0 || paramIndex >= genericNameProvider.GetParameterCount())
+                    if (!int.TryParse(format.Substring(start, i - start), out var paramIndex) || paramIndex < 0 || paramIndex >= genericNameProvider.GetParameterCount())
                         throw new InvalidDataContractException(SR.Format(SR.GenericParameterNotValid, format.Substring(start, i - start), genericNameProvider.GetGenericTypeName(), genericNameProvider.GetParameterCount() - 1));
 
                     typeName.Append(genericNameProvider.GetParameterName(paramIndex));
@@ -420,7 +424,7 @@ internal partial class DataContractContext
 
                 if (type is INamedTypeSymbol namedType && !SymbolEqualityComparer.Default.Equals(namedType, namedType.ConstructedFrom))
                     name = ExpandGenericParameters(name, namedType);
-                
+
                 name = EncodeLocalName(name);
             }
             else

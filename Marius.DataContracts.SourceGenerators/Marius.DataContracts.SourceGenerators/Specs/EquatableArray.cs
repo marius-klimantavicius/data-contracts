@@ -83,5 +83,7 @@ internal readonly struct EquatableArray<T> : IEquatable<EquatableArray<T>>, IEnu
 
     public static bool operator ==(EquatableArray<T> left, EquatableArray<T> right) => left.Equals(right);
     public static bool operator !=(EquatableArray<T> left, EquatableArray<T> right) => !left.Equals(right);
+
+    public List<T> ToList() => new List<T>(_array ?? []);
 }
 

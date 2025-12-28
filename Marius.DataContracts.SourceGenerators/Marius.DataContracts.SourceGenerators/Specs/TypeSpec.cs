@@ -17,29 +17,32 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
     public required bool IsTypeSerializable { get; init; } // only for value types
     public required SpecialTypeKind SpecialType { get; init; }
     public required TypeKindSpec TypeKind { get; init; }
+
     public TypeSpec? ElementType { get; init; }
-    
-    /// <summary>
-    /// Type arguments for generic types.
-    /// </summary>
-    public EquatableArray<TypeSpec> TypeArguments { get; init; } = EquatableArray<TypeSpec>.Empty;
+
+    public required TypeSpec? ConstructedFrom { get; init; }
+    public required EquatableArray<TypeParameterSpec> TypeParameters { get; init; }
+    public required EquatableArray<TypeSpec> TypeArguments { get; init; }
 
     public bool Equals(TypeSpec? other)
     {
         if (other is null) return false;
         if (ReferenceEquals(this, other)) return true;
+
         return FullyQualifiedName == other.FullyQualifiedName &&
-               IsValueType == other.IsValueType &&
-               IsNullableValueType == other.IsNullableValueType &&
-               IsGenericType == other.IsGenericType &&
-               IsOpenGenericType == other.IsOpenGenericType &&
-               IsArray == other.IsArray &&
-               IsAbstract == other.IsAbstract &&
-               IsTypeSerializable == other.IsTypeSerializable &&
-               SpecialType == other.SpecialType &&
-               TypeKind == other.TypeKind &&
-               Equals(ElementType, other.ElementType) &&
-               TypeArguments.Equals(other.TypeArguments);
+            IsValueType == other.IsValueType &&
+            IsNullableValueType == other.IsNullableValueType &&
+            IsGenericType == other.IsGenericType &&
+            IsOpenGenericType == other.IsOpenGenericType &&
+            IsArray == other.IsArray &&
+            IsAbstract == other.IsAbstract &&
+            IsTypeSerializable == other.IsTypeSerializable &&
+            SpecialType == other.SpecialType &&
+            TypeKind == other.TypeKind &&
+            Equals(ElementType, other.ElementType) &&
+            ConstructedFrom?.Equals(other.ConstructedFrom) == true &&
+            TypeParameters.Equals(other.TypeParameters) &&
+            TypeArguments.Equals(other.TypeArguments);
     }
 
     public override bool Equals(object? obj) => Equals(obj as TypeSpec);
@@ -59,6 +62,8 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
             hashCode = (hashCode * 397) ^ (int)SpecialType;
             hashCode = (hashCode * 397) ^ (int)TypeKind;
             hashCode = (hashCode * 397) ^ (ElementType?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (ConstructedFrom?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ TypeParameters.GetHashCode();
             hashCode = (hashCode * 397) ^ TypeArguments.GetHashCode();
             return hashCode;
         }
@@ -66,12 +71,12 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
 
     public static bool operator ==(TypeSpec? left, TypeSpec? right) => Equals(left, right);
     public static bool operator !=(TypeSpec? left, TypeSpec? right) => !Equals(left, right);
-    
+
     /// <summary>
     /// Returns "ref " if value type, empty string otherwise.
     /// </summary>
     public string MaybeRef() => IsValueType ? "ref " : "";
-    
+
     /// <summary>
     /// Returns true if this type can be instantiated (is not an abstract class or interface).
     /// </summary>
@@ -109,4 +114,3 @@ internal enum TypeKindSpec
     Enum,
     Delegate,
 }
-

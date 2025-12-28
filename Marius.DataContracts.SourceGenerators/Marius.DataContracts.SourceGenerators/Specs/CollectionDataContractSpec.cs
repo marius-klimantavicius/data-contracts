@@ -12,6 +12,7 @@ internal sealed class CollectionDataContractSpec : DataContractSpec, IEquatable<
     public required TypeSpec ItemType { get; init; }
     public required string CollectionItemName { get; init; }
     public required TypeSpec? CollectionElementType { get; init; }
+    public required TypeSpec? EffectiveType { get; init; }
     public string? KeyName { get; init; }
     public string? ValueName { get; init; }
     public bool IsDictionary => KeyName != null;

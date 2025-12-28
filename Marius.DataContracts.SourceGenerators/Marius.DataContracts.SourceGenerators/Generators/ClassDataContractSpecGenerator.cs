@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis.CSharp;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 internal class ClassDataContractSpecGenerator : SpecContractGenerator
 {
@@ -193,6 +193,9 @@ internal class ClassDataContractSpecGenerator : SpecContractGenerator
 
     public override void GenerateDependencies(string xmlDictionary)
     {
+        if (ClassContract.UnderlyingType.IsOpenGenericType)
+            return; // Skip open generic types
+
         if (ClassContract.KnownDataContracts.Length > 0)
         {
             var dictionary = LocalName("__knownTypes");
@@ -203,7 +206,7 @@ internal class ClassDataContractSpecGenerator : SpecContractGenerator
                 var knownContract = GetContract(item.ContractId);
                 Debug.Assert(knownContract != null);
 
-                AppendLine($"{dictionary}.TryAdd({knownContract.GeneratedName}.XmlName, {knownContract.GeneratedName});");
+                AppendLine($"{dictionary}.TryAdd({knownContract!.GeneratedName}.XmlName, {knownContract.GeneratedName});");
             }
 
             AppendLine($"{ClassContract.GeneratedName}.KnownDataContracts = global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary({dictionary});");

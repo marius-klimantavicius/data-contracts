@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 internal static class DiagnosticDescriptors
 {
@@ -90,7 +90,7 @@ internal static class DiagnosticDescriptors
     public static DiagnosticDescriptor InvalidReturnTypeOnGetSchemaMethod { get; } = DiagnosticDescriptorHelper.Create(
         id: "DCS1011",
         title: "Invalid return type on GetSchema method",
-        messageFormat: SR.InvalidReturnTypeOnGetSchemaMethod,
+        messageFormat: System.SR.InvalidReturnTypeOnGetSchemaMethod,
         category: SourceGenerationName,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);

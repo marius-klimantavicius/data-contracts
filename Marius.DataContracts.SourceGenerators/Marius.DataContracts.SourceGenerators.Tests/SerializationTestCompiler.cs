@@ -354,7 +354,7 @@ public class SerializationTestCompiler
         var compilation = CSharpCompilation.Create(
             $"TestAssembly_{Guid.NewGuid():N}",
             new[] { infrastructureTree, dataContractTree, testTree },
-            Net80.References.All
+            Net100.References.All
                 .Add(MetadataReference.CreateFromFile(typeof(Runtime.DataContractSerializer).Assembly.Location))
             ,
             new CSharpCompilationOptions(

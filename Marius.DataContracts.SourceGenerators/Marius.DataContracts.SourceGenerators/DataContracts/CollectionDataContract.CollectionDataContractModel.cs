@@ -55,7 +55,7 @@ public partial class CollectionDataContract
 
                         Debug.Assert(KeyName != null);
                         Debug.Assert(ValueName != null);
-                        _itemContract = Context.GetOrAddDataContract(ItemType, () => ClassDataContract.CreateClassDataContractForKeyValue(Context, ItemType, Namespace, new string[] { KeyName, ValueName }));
+                        _itemContract = Context.GetOrAddDataContract(ItemType, () => ClassDataContract.CreateClassDataContractForKeyValue(Context, ItemType, Namespace, new string[] { KeyName!, ValueName! }));
                     }
                     else
                     {
@@ -223,7 +223,7 @@ public partial class CollectionDataContract
             }
             else
             {
-                enumeratorType = GetEnumeratorMethod.ReturnType;
+                enumeratorType = GetEnumeratorMethod!.ReturnType;
             }
 
             var getCurrentMethod = enumeratorType.GetMembers(GetCurrentMethodName).OfType<IMethodSymbol>().FirstOrDefault(s => !s.IsStatic && s.DeclaredAccessibility == Accessibility.Public && s.Parameters.Length == 0);

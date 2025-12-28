@@ -3,6 +3,7 @@ using System.Runtime.Serialization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.DataContracts;
+using Marius.DataContracts.SourceGenerators.Generators;
 
 namespace Marius.DataContracts.SourceGenerators.Specs;
 
@@ -131,6 +132,11 @@ internal sealed class DataContractParser
 
     private string GetOrCreateAccessor(ISymbol symbol, bool isRegularConstructor = false)
     {
+        if (symbol is IMethodSymbol methodSymbol)
+            symbol = methodSymbol.OriginalDefinition;
+        else if (symbol is IFieldSymbol fieldSymbol)
+            symbol = fieldSymbol.OriginalDefinition;
+
         if (_accessorCache.TryGetValue(symbol, out var existing))
             return existing.Name;
 
@@ -169,6 +175,7 @@ internal sealed class DataContractParser
             }),
             IsRegularConstructor = false,
         };
+
         _accessorCache[type] = spec;
         _accessors.Add(spec);
         return spec.Name;
@@ -229,6 +236,70 @@ internal sealed class DataContractParser
         }
     }
 
+    /// <summary>
+    /// Creates a TypeParameterSpec from an ITypeParameterSymbol, including all constraints.
+    /// </summary>
+    private TypeParameterSpec CreateTypeParameterSpec(ITypeParameterSymbol typeParam, bool isMethodTypeParameter)
+    {
+        var constraints = new List<TypeConstraintSpec>();
+        foreach (var constraintType in typeParam.ConstraintTypes)
+        {
+            if (constraintType is ITypeParameterSymbol typeParamConstraint)
+            {
+                constraints.Add(new TypeConstraintSpec
+                {
+                    Kind = TypeConstraintKind.TypeParameter,
+                    ConstraintTypeFullName = typeParamConstraint.Name,
+                    IsGenericType = false,
+                });
+            }
+            else
+            {
+                // Type constraint (base class or interface)
+                var typeArgs = EquatableArray<string>.Empty;
+                var isGenericType = false;
+
+                if (constraintType is INamedTypeSymbol namedConstraint && namedConstraint.IsGenericType)
+                {
+                    isGenericType = true;
+                    var args = new List<string>();
+                    foreach (var arg in namedConstraint.TypeArguments)
+                    {
+                        // Use the simple name for type parameters, fully qualified for concrete types
+                        if (arg is ITypeParameterSymbol)
+                            args.Add(arg.Name);
+                        else
+                            args.Add(arg.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+                    }
+
+                    typeArgs = new EquatableArray<string>(args);
+                }
+
+                constraints.Add(new TypeConstraintSpec
+                {
+                    Kind = TypeConstraintKind.Type,
+                    ConstraintTypeFullName = constraintType.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    IsGenericType = isGenericType,
+                    TypeArguments = typeArgs,
+                });
+            }
+        }
+
+        return new TypeParameterSpec
+        {
+            Name = typeParam.Name,
+            Ordinal = typeParam.Ordinal,
+            IsMethodTypeParameter = isMethodTypeParameter,
+            Constraints = new EquatableArray<TypeConstraintSpec>(constraints),
+            HasNotNullConstraint = typeParam.HasNotNullConstraint,
+            HasUnmanagedConstraint = typeParam.HasUnmanagedTypeConstraint,
+            HasValueTypeConstraint = typeParam.HasValueTypeConstraint,
+            HasReferenceTypeConstraint = typeParam.HasReferenceTypeConstraint,
+            HasReferenceTypeConstraintNullable = typeParam.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated,
+            HasConstructorConstraint = typeParam.HasConstructorConstraint,
+        };
+    }
+
     private static string Escape(string input)
     {
         if (SyntaxFacts.IsValidIdentifier(input))
@@ -242,7 +313,11 @@ internal sealed class DataContractParser
                 buffer[index++] = item;
         }
 
-        return new string(buffer.Slice(0, index));
+        unsafe
+        {
+            fixed (char* ptr = buffer)
+                return new string(ptr, 0, index);
+        }
     }
 
     private int GetContractId(DataContract? contract)
@@ -459,6 +534,39 @@ internal sealed class DataContractParser
             }
         }
 
+        var effectiveTypeSpec = default(TypeSpec?);
+        if (typeSpec.TypeKind == TypeKindSpec.Interface)
+        {
+            var itemType = contract.ItemType;
+            switch (contract.Kind)
+            {
+                case CollectionKind.GenericDictionary:
+                    if (itemType is INamedTypeSymbol namedType)
+                    {
+                        var keyType = namedType.TypeArguments.Length > 0 ? namedType.TypeArguments[0] : itemType;
+                        var valueType = namedType.TypeArguments.Length > 1 ? namedType.TypeArguments[1] : itemType;
+                        effectiveTypeSpec = CreateTypeSpec(_context.KnownSymbols.DictionaryOfTKeyTValueType!.Construct(keyType, valueType));
+                    }
+                    else
+                    {
+                        effectiveTypeSpec = CreateTypeSpec(_context.KnownSymbols.DictionaryOfTKeyTValueType!.Construct(itemType, itemType));
+                    }
+
+                    break;
+                case CollectionKind.Dictionary:
+                    effectiveTypeSpec = CreateTypeSpec(_context.KnownSymbols.DictionaryOfTKeyTValueType!.Construct(_context.KnownSymbols.ObjectType, _context.KnownSymbols.ObjectType));
+                    break;
+                case CollectionKind.Collection:
+                case CollectionKind.GenericCollection:
+                case CollectionKind.Enumerable:
+                case CollectionKind.GenericEnumerable:
+                case CollectionKind.List:
+                case CollectionKind.GenericList:
+                    effectiveTypeSpec = CreateTypeSpec(_context.KnownSymbols.Compilation.CreateArrayTypeSymbol(itemType, rank: 1));
+                    break;
+            }
+        }
+
         return new CollectionDataContractSpec
         {
             Id = id,
@@ -483,6 +591,7 @@ internal sealed class DataContractParser
             CollectionItemName = contract.CollectionItemName,
             CollectionElementType = collectionElementTypeSpec,
             ItemType = itemTypeSpec,
+            EffectiveType = effectiveTypeSpec,
             ItemName = contract.ItemName,
             KeyName = contract.KeyName,
             ValueName = contract.ValueName,
@@ -608,7 +717,7 @@ internal sealed class DataContractParser
         var schemaProviderMethodIsXmlSchemaType = default(bool?);
         if (!string.IsNullOrEmpty(contract.SchemaProviderMethod))
         {
-            var method = type?.GetMembers(contract.SchemaProviderMethod)
+            var method = type?.GetMembers(contract.SchemaProviderMethod!)
                 .OfType<IMethodSymbol>()
                 .FirstOrDefault(m => m.Parameters.Length == 1 &&
                     SymbolEqualityComparer.Default.Equals(m.Parameters[0].Type, _context.KnownSymbols.XmlSchemaSetType) &&
@@ -870,16 +979,31 @@ internal sealed class DataContractParser
             elementType = CreateTypeSpec(nullableType.TypeArguments[0]);
         }
 
+        var constructedFromSpec = default(TypeSpec);
         var typeArguments = EquatableArray<TypeSpec>.Empty;
-        if (type is INamedTypeSymbol genericNamedType && genericNamedType.TypeArguments.Length > 0)
+        var typeParameters = EquatableArray<TypeParameterSpec>.Empty;
+        if (type is INamedTypeSymbol genericNamedType)
         {
-            var args = new List<TypeSpec>();
-            foreach (var arg in genericNamedType.TypeArguments)
+            if (genericNamedType.TypeArguments.Length > 0)
             {
-                args.Add(CreateTypeSpec(arg));
+                var args = new List<TypeSpec>();
+                foreach (var arg in genericNamedType.TypeArguments)
+                    args.Add(CreateTypeSpec(arg));
+
+                typeArguments = new EquatableArray<TypeSpec>(args);
             }
 
-            typeArguments = new EquatableArray<TypeSpec>(args);
+            if (genericNamedType.TypeParameters.Length > 0)
+            {
+                var parameters = new List<TypeParameterSpec>();
+                foreach (var item in genericNamedType.TypeParameters)
+                    parameters.Add(CreateTypeParameterSpec(item, false));
+
+                typeParameters = new EquatableArray<TypeParameterSpec>(parameters);
+            }
+
+            if (genericNamedType.IsGenericType && !SymbolEqualityComparer.Default.Equals(genericNamedType, genericNamedType.ConstructedFrom))
+                constructedFromSpec = CreateTypeSpec(genericNamedType.ConstructedFrom);
         }
 
         var isTypeSerializable = _context.IsTypeSerializable(type);
@@ -898,7 +1022,9 @@ internal sealed class DataContractParser
             SpecialType = specialType,
             TypeKind = typeKind,
             ElementType = elementType,
+            ConstructedFrom = constructedFromSpec,
             TypeArguments = typeArguments,
+            TypeParameters = typeParameters,
         };
 
         _typeSpecCache[type] = spec;

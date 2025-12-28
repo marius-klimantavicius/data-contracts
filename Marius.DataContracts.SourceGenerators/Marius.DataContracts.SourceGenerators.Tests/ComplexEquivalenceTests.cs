@@ -7,7 +7,7 @@ namespace Marius.DataContracts.SourceGenerators.Tests;
 /// Tests for complex serialization scenarios including inheritance, structs,
 /// preserve references, get-only collections, serialization callbacks, and special interfaces.
 /// </summary>
-public class CompltexEquivalenceTests
+public class ComplexEquivalenceTests
 {
     private async Task<SerializationTestResult> RunSerializationTest(string dataContractCode, string testCode)
     {
@@ -2567,4 +2567,58 @@ public class CompltexEquivalenceTests
         Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
         Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
     }
+    
+    
+    /// <summary>
+    /// Tests generic type contract.
+    /// </summary>
+    [Fact]
+    public async Task GenericType_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "Generic", Namespace = "http://test.contracts")]
+            [KnownType(typeof(GenericContract<int>))]
+            public class GenericContract<TValue>
+                where TValue: struct
+            {
+                [DataMember(Order = 1)]
+                public TValue Id { get; init; }
+
+                [DataMember(Order = 2)]
+                private TValue CreatedAt;
+
+                [DataMember(Order = 3)]
+                public string? Description { get; init; }
+                
+                public TValue CreatedAtSetter
+                {
+                    get => CreatedAt;
+                    set => CreatedAt = value;
+                }
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.GenericContract<int>
+            {
+                Id = 5554,
+                CreatedAtSetter = 20240615,
+                Description = "Test Description"
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.GenericContract<int>));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
+
 }

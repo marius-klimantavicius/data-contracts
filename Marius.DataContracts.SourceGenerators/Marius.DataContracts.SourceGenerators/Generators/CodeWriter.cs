@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 public class CodeWriter
 {

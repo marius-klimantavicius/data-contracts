@@ -213,8 +213,8 @@ public partial class CollectionDataContract
             if (tryCreate)
             {
                 dataContract = isReadOnlyContract
-                    ? new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod, serializationExceptionMessage, deserializationExceptionMessage)
-                    : new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod, addMethod, defaultCtor, !constructorRequired);
+                    ? new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod!, serializationExceptionMessage, deserializationExceptionMessage)
+                    : new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod!, addMethod, defaultCtor, !constructorRequired);
             }
         }
         else
@@ -236,7 +236,7 @@ public partial class CollectionDataContract
             switch (kind)
             {
                 case CollectionKind.GenericDictionary:
-                    addMethodTypeArray = knownInterfaceType.TypeArguments.ToArray();
+                    addMethodTypeArray = knownInterfaceType!.TypeArguments.ToArray();
                     var isOpenGeneric = cmp.Equals(knownInterfaceType, knownInterfaceType.ConstructedFrom)
                         || (addMethodTypeArray[0].TypeKind == TypeKind.TypeParameter && addMethodTypeArray[1].TypeKind == TypeKind.TypeParameter);
                     itemType = isOpenGeneric ? knownSymbols.KeyValueOfType! : knownSymbols.KeyValueOfType!.Construct(addMethodTypeArray);
@@ -247,7 +247,7 @@ public partial class CollectionDataContract
                     break;
                 case CollectionKind.GenericList:
                 case CollectionKind.GenericCollection:
-                    addMethodTypeArray = knownInterfaceType.TypeArguments.ToArray();
+                    addMethodTypeArray = knownInterfaceType!.TypeArguments.ToArray();
                     itemType = addMethodTypeArray[0];
                     break;
                 case CollectionKind.List:
@@ -259,12 +259,12 @@ public partial class CollectionDataContract
             if (tryCreate)
             {
                 Debug.Assert(addMethodTypeArray != null);
-                GetCollectionMethods(knownSymbols, type, knownInterfaceType, addMethodTypeArray, true /*addMethodOnInterface*/, out getEnumeratorMethod, out addMethod);
+                GetCollectionMethods(knownSymbols, type, knownInterfaceType!, addMethodTypeArray!, true /*addMethodOnInterface*/, out getEnumeratorMethod, out addMethod);
 
                 Debug.Assert(getEnumeratorMethod != null);
                 dataContract = isReadOnlyContract
-                    ? new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod, serializationExceptionMessage, deserializationExceptionMessage)
-                    : new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod, addMethod, defaultCtor, !constructorRequired);
+                    ? new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod!, serializationExceptionMessage, deserializationExceptionMessage)
+                    : new CollectionDataContract(context, type, kind, itemType, getEnumeratorMethod!, addMethod, defaultCtor, !constructorRequired);
             }
         }
 

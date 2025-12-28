@@ -1,7 +1,7 @@
-using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis.CSharp;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 internal class PrimitiveDataContractSpecGenerator : SpecContractGenerator
 {

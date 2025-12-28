@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 internal static class RoslynExtensions
 {

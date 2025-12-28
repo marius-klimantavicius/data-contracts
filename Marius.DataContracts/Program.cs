@@ -1,4 +1,5 @@
-﻿using System.Runtime.Serialization;
+﻿using System.Numerics;
+using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
@@ -18,7 +19,7 @@ class Program
                 Key = Guid.NewGuid().ToString(),
                 Id = 337,
             },
-            Range = new IpRange
+            Range = new IpRange<int, decimal>
             {
                 From = 0x1234,
                 To = 0x7FFF,
@@ -180,13 +181,15 @@ public struct LocalName
 }
 
 [DataContract]
-public class IpRange
+public class IpRange<T, TT>
+    where T : struct
+    where TT : struct, INumber<TT>
 {
     [DataMember]
-    public int From { get; set; }
+    public T From { get; init; }
 
     [DataMember]
-    public int To { get; set; }
+    public required TT To { get; init; }
 }
 
 [DataContract(Name = "S", Namespace = "SourceGenerator.Tests")]
@@ -206,7 +209,7 @@ public class SimpleContract
     public LocalName? LocalName { get; set; }
 
     [DataMember]
-    public IpRange? Range { get; set; }
+    public IpRange<int, decimal>? Range { get; set; }
 
     private SortedDictionary<string, LocalName>? _keyedNames;
 

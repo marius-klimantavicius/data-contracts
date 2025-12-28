@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.DataContracts;
+using Marius.DataContracts.SourceGenerators.Generators;
 using Marius.DataContracts.SourceGenerators.Specs;
 
 namespace Marius.DataContracts.SourceGenerators;
@@ -72,7 +73,7 @@ public class DataContractGenerator : IIncrementalGenerator
             var visited = new HashSet<DataContract>(ReferenceEqualityComparer.Instance);
             while (true)
             {
-                if (!ResolveContractDependencies(dataContractContext, visited))
+                if (!ResolveContractDependencies(dataContractContext, visited, errors))
                     break;
             }
 
@@ -95,7 +96,7 @@ public class DataContractGenerator : IIncrementalGenerator
     /// Force resolution of all dependent contracts to ensure they are included in the output.
     /// This is necessary because some contracts (like KeyValue for dictionaries) are lazily created.
     /// </summary>
-    private static bool ResolveContractDependencies(DataContractContext context, HashSet<DataContract> visited)
+    private static bool ResolveContractDependencies(DataContractContext context, HashSet<DataContract> visited, List<(ISymbol Symbol, Exception Exception)> errors)
     {
         var anyFound = false;
         for (var i = 0; i < context.DataContracts.Length; i++)
@@ -104,14 +105,14 @@ public class DataContractGenerator : IIncrementalGenerator
             if (item == null)
                 continue;
 
-            if (ResolveContractDependenciesCore(context, item, visited))
+            if (ResolveContractDependenciesCore(context, item, visited, errors))
                 anyFound = true;
         }
 
         return anyFound;
     }
 
-    private static bool ResolveContractDependenciesCore(DataContractContext context, DataContract contract, HashSet<DataContract> visited)
+    private static bool ResolveContractDependenciesCore(DataContractContext context, DataContract contract, HashSet<DataContract> visited, List<(ISymbol Symbol, Exception Exception)> errors)
     {
         if (!visited.Add(contract))
             return false;
@@ -121,23 +122,44 @@ public class DataContractGenerator : IIncrementalGenerator
             // Ensure member contracts are resolved
             foreach (var item in classDataContract.Members)
             {
-                // Force resolution of MemberTypeContract
-                var memberContract = item.MemberTypeContract;
-                ResolveContractDependenciesCore(context, memberContract, visited);
+                try
+                {
+                    // Force resolution of MemberTypeContract
+                    var memberContract = item.MemberTypeContract;
+                    ResolveContractDependenciesCore(context, memberContract, visited, errors);
+                }
+                catch (Exception ex) when (!ExceptionUtility.IsFatal(ex))
+                {
+                    errors.Add((item.MemberInfo, ex));
+                }
             }
         }
         else if (contract is CollectionDataContract collectionDataContract)
         {
-            // Force resolution of ItemContract - this creates KeyValue contracts for dictionaries
-            var itemContract = collectionDataContract.ItemContract;
-            ResolveContractDependenciesCore(context, itemContract, visited);
+            try
+            {
+                // Force resolution of ItemContract - this creates KeyValue contracts for dictionaries
+                var itemContract = collectionDataContract.ItemContract;
+                ResolveContractDependenciesCore(context, itemContract, visited, errors);
+            }
+            catch (Exception ex) when (!ExceptionUtility.IsFatal(ex))
+            {
+                errors.Add((collectionDataContract.UnderlyingType, ex));
+            }
 
-            if (contract.UnderlyingType.TypeKind == TypeKind.Interface)
-                AddCommonCollectionImplementations(context, collectionDataContract);
+            try
+            {
+                if (contract.UnderlyingType.TypeKind == TypeKind.Interface)
+                    AddCommonCollectionImplementations(context, collectionDataContract);
+            }
+            catch (Exception ex) when (!ExceptionUtility.IsFatal(ex))
+            {
+                errors.Add((collectionDataContract.UnderlyingType, ex));
+            }
         }
 
         foreach (var item in contract.KnownDataContracts)
-            ResolveContractDependenciesCore(context, item, visited);
+            ResolveContractDependenciesCore(context, item, visited, errors);
 
         return true;
     }
@@ -327,98 +349,9 @@ public class DataContractGenerator : IIncrementalGenerator
             writer.AppendLine("[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
             writer.AppendLine("private static void ThrowUnexpectedStateException(global::System.Xml.XmlNodeType expectedState, global::Marius.DataContracts.Runtime.XmlReaderDelegator xmlReader) => throw global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.CreateUnexpectedStateException(expectedState, xmlReader);");
 
-            GeneratePrivateAccessors(writer, contractSet);
+            PrivateAccessorSpecGenerator.GeneratePrivateAccessors(writer, contractSet);
         }
 
         context.AddSource($"DataContractContext.g.cs", writer.GetString());
-    }
-
-    private static void GeneratePrivateAccessors(CodeWriter writer, DataContractSetSpec contractSet)
-    {
-        if (contractSet.PrivateAccessors.Length == 0)
-            return;
-
-        writer.AppendLine();
-        writer.AppendLine("private static class PrivateAccessor");
-        using (writer.Block())
-        {
-            var needLine = false;
-            foreach (var accessor in contractSet.PrivateAccessors)
-            {
-                if (needLine)
-                    writer.AppendLine();
-                needLine = true;
-
-                switch (accessor.Kind)
-                {
-                    case PrivateAccessorKind.Constructor:
-                    case PrivateAccessorKind.Method:
-                        GenerateMethodAccessor(writer, accessor);
-                        break;
-                    case PrivateAccessorKind.Field:
-                        GenerateFieldAccessor(writer, accessor);
-                        break;
-                }
-            }
-        }
-    }
-
-    private static void GenerateMethodAccessor(CodeWriter writer, PrivateAccessorSpec accessor)
-    {
-        var args = "";
-        if (accessor.Parameters.Length > 0)
-        {
-            args = string.Join(", ", accessor.Parameters.AsArray().Select(p =>
-            {
-                var modifier = p.RefKind switch
-                {
-                    ParameterRefKind.Ref => "ref ",
-                    ParameterRefKind.Out => "out ",
-                    ParameterRefKind.In => "in ",
-                    _ => "",
-                };
-                return $"{modifier}{p.Type.FullyQualifiedName} {p.Name}";
-            }));
-        }
-
-        if (accessor.IsRegularConstructor)
-        {
-            writer.AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Constructor, Name = {SymbolDisplay.FormatLiteral(accessor.TargetName, true)})]");
-            writer.AppendLine($"public static extern {accessor.ContainingType.FullyQualifiedName} {accessor.Name}({args});");
-        }
-        else
-        {
-            if (!string.IsNullOrEmpty(args))
-                args = ", " + args;
-
-            writer.AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Method, Name = {SymbolDisplay.FormatLiteral(accessor.TargetName, true)})]");
-            if (accessor.Kind == PrivateAccessorKind.Constructor)
-                writer.AppendLine($"public static extern void {accessor.Name}({accessor.ContainingType.MaybeRef()}{accessor.ContainingType.FullyQualifiedName} self{args});");
-            else
-                writer.AppendLine($"public static extern {accessor.ReturnType?.FullyQualifiedName} {accessor.Name}({accessor.ContainingType.MaybeRef()}{accessor.ContainingType.FullyQualifiedName} self{args});");
-        }
-    }
-
-    private static void GenerateFieldAccessor(CodeWriter writer, PrivateAccessorSpec accessor)
-    {
-        writer.AppendLine($"[global::System.Runtime.CompilerServices.UnsafeAccessor(global::System.Runtime.CompilerServices.UnsafeAccessorKind.Field, Name = {SymbolDisplay.FormatLiteral(accessor.TargetName, true)})]");
-        writer.AppendLine($"public static extern ref {accessor.ReturnType!.FullyQualifiedName} {accessor.Name}({accessor.ContainingType.MaybeRef()}{accessor.ContainingType.FullyQualifiedName} self);");
-    }
-
-    internal static int ReflectionGetMembers(ClassDataContractSpec classContract, DataContractSetSpec contractSet, DataMemberSpec[] members)
-    {
-        var memberCount = 0;
-        if (classContract.BaseClassContractId >= 0)
-        {
-            var baseContract = contractSet.GetContract(classContract.BaseClassContractId) as ClassDataContractSpec;
-            if (baseContract != null)
-                memberCount = ReflectionGetMembers(baseContract, contractSet, members);
-        }
-
-        var childElementIndex = memberCount;
-        for (var i = 0; i < classContract.Members.Length; i++, memberCount++)
-            members[childElementIndex + i] = classContract.Members[i];
-
-        return memberCount;
     }
 }

@@ -1,8 +1,8 @@
 using System.Diagnostics;
-using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis.CSharp;
 
-namespace Marius.DataContracts.SourceGenerators;
+namespace Marius.DataContracts.SourceGenerators.Generators;
 
 /// <summary>
 /// Generates code for XmlDataContract using Spec classes (free from Roslyn symbols).
@@ -147,12 +147,12 @@ internal class XmlDataContractSpecGenerator : SpecContractGenerator
                     if (string.IsNullOrEmpty(XmlContract.XmlRootAttribute.ElementName))
                         AppendLine($"{topLevelElementName} = {xmlDictionaryLocal}.Add({xmlName}.Name);");
                     else
-                        AppendLine($"{topLevelElementName} = {xmlDictionaryLocal}.Add({SymbolDisplay.FormatLiteral(XmlContract.XmlRootAttribute.ElementName, true)});");
+                        AppendLine($"{topLevelElementName} = {xmlDictionaryLocal}.Add({SymbolDisplay.FormatLiteral(XmlContract.XmlRootAttribute.ElementName!, true)});");
 
                     if (string.IsNullOrEmpty(XmlContract.XmlRootAttribute.Namespace))
                         AppendLine($"{topLevelElementNamespace} = global::Marius.DataContracts.Runtime.DictionaryGlobals.EmptyString;");
                     else
-                        AppendLine($"{topLevelElementNamespace} = {xmlDictionaryLocal}.Add({SymbolDisplay.FormatLiteral(XmlContract.XmlRootAttribute.Namespace, true)});");
+                        AppendLine($"{topLevelElementNamespace} = {xmlDictionaryLocal}.Add({SymbolDisplay.FormatLiteral(XmlContract.XmlRootAttribute.Namespace!, true)});");
                 }
             }
 
@@ -217,7 +217,7 @@ internal class XmlDataContractSpecGenerator : SpecContractGenerator
                 var knownContract = GetContract(item.ContractId);
                 Debug.Assert(knownContract != null);
 
-                AppendLine($"{dictionary}.TryAdd({knownContract.GeneratedName}.XmlName, {knownContract.GeneratedName});");
+                AppendLine($"{dictionary}.TryAdd({knownContract!.GeneratedName}.XmlName, {knownContract.GeneratedName});");
             }
 
             AppendLine($"{XmlContract.GeneratedName}.KnownDataContracts = global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary({dictionary});");
