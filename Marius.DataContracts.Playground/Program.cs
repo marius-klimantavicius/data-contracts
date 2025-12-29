@@ -3,9 +3,8 @@ using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
-using Marius.DataContracts.Runtime;
 
-namespace Marius.DataContracts;
+namespace Marius.DataContracts.Playground;
 
 class Program
 {
@@ -40,8 +39,8 @@ class Program
             Status = Status.Paused,
         };
 
-        var localSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(new DataContractProvider(Marius.DataContracts.Runtime.DataContractContext.DataContracts, Runtime.DataContractContext.TypeDataContracts), typeof(SimpleContract));
-        var netSerializer = new global::System.Runtime.Serialization.DataContractSerializer(typeof(SimpleContract), new Type[] { typeof(uint[]) });
+        var localSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(new Runtime.DataContractProvider(Runtime.DataContractContext.DataContracts, Runtime.DataContractContext.TypeDataContracts), typeof(SimpleContract));
+        var netSerializer = new DataContractSerializer(typeof(SimpleContract), new Type[] { typeof(uint[]) });
 
         // Serialize with System.Runtime.Serialization.DataContractSerializer
         var netStream = new MemoryStream();

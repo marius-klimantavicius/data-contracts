@@ -1,21 +1,41 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <OutputType>Exe</OutputType>
-        <TargetFramework>net10.0</TargetFramework>
+        <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <IsPackable>true</IsPackable>
     </PropertyGroup>
 
+    <PropertyGroup>
+        <PackageId>Marius.DataContracts</PackageId>
+        <Authors>Marius Klimantavičius</Authors>
+        <RepositoryUrl>https://github.com/marius-klimantavicius/data-contracts</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        <Description>Source generator based DataContractSerializer for usage with native AOT</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <IncludeSymbols>true</IncludeSymbols>
+        <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <DebugType>embedded</DebugType>
+    </PropertyGroup>
+    
     <ItemGroup>
-      <ProjectReference Include="..\Marius.DataContracts.Runtime\Marius.DataContracts.Runtime.csproj" />
-      <ProjectReference Include="..\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+      <ProjectReference Include="..\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators.csproj" ReferenceOutputAssembly="false" PackAsAnalyzer="true" />
     </ItemGroup>
 
     <ItemGroup>
-        <Generated Include="obj\Debug\**\*.g.cs" />
+        <None Include="..\README.md" Pack="true" PackagePath="\">
+            <Link>README.md</Link>
+        </None>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="..\LICENSE" Pack="true" PackagePath="\">
+            <Link>LICENSE</Link>
+        </None>
     </ItemGroup>
 
 </Project>

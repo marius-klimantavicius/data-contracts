@@ -54,18 +54,33 @@ internal class EnumDataContractSpecGenerator : SpecContractGenerator
 
             AppendLine($"IsFlags = {SymbolDisplay.FormatPrimitive(EnumContract.IsFlags, true, false)},");
             AppendLine($"IsULong = {SymbolDisplay.FormatPrimitive(EnumContract.IsULong, true, false)},");
-            AppendLine("MemberNames = global::System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(");
-            using (Block("[", "]),"))
+
+            if (EnumContract.Members.Length > 0)
             {
-                foreach (var item in EnumContract.Members)
-                    AppendLine($"{SymbolDisplay.FormatLiteral(item.Name, quote: true)},");
+                AppendLine("MemberNames = global::System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(");
+                using (Block("[", "]),"))
+                {
+                    foreach (var item in EnumContract.Members)
+                        AppendLine($"{SymbolDisplay.FormatLiteral(item.Name, quote: true)},");
+                }
+            }
+            else
+            {
+                AppendLine("MemberNames = global::System.Collections.Immutable.ImmutableArray<string>.Empty,");
             }
 
-            AppendLine("Values = global::System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(");
-            using (Block("[", "]),"))
+            if (EnumContract.Values.Length > 0)
             {
-                foreach (var item in EnumContract.Values)
-                    AppendLine($"{SymbolDisplay.FormatPrimitive(item, false, false)}L,");
+                AppendLine("Values = global::System.Runtime.InteropServices.ImmutableCollectionsMarshal.AsImmutableArray(");
+                using (Block("[", "]),"))
+                {
+                    foreach (var item in EnumContract.Values)
+                        AppendLine($"{SymbolDisplay.FormatPrimitive(item, false, false)}L,");
+                }
+            }
+            else
+            {
+                AppendLine("Values = global::System.Collections.Immutable.ImmutableArray<long>.Empty,");
             }
         }
 

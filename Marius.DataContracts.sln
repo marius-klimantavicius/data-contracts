@@ -1,17 +1,18 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts", "Marius.DataContracts\Marius.DataContracts.csproj", "{68536766-4673-48B8-AE8D-027171DB4C3E}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts.Playground", "Marius.DataContracts.Playground\Marius.DataContracts.Playground.csproj", "{68536766-4673-48B8-AE8D-027171DB4C3E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts.SourceGenerators", "Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators.csproj", "{CCE9A9BA-DF22-4024-A702-F7632DB2EC76}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts.SourceGenerators.Tests", "Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators.Tests\Marius.DataContracts.SourceGenerators.Tests.csproj", "{7CF8C382-1D06-4FC9-8AB1-8378619CAD5C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts.Runtime", "Marius.DataContracts.Runtime\Marius.DataContracts.Runtime.csproj", "{EE691C88-8C38-4E7D-A261-EEC3E54B5D14}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Marius.DataContracts", "Marius.DataContracts\Marius.DataContracts.csproj", "{EE691C88-8C38-4E7D-A261-EEC3E54B5D14}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{17797E0F-92FD-4AC9-AF0B-C69A04B24B15}"
 	ProjectSection(SolutionItems) = preProject
 		README.md = README.md
 		LICENSE = LICENSE
+		Directory.Build.props = Directory.Build.props
 	EndProjectSection
 EndProject
 Global
