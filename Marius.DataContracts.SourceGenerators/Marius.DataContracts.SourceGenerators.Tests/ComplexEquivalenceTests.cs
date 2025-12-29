@@ -2595,11 +2595,20 @@ public class ComplexEquivalenceTests
                 [DataMember(Order = 3)]
                 public string? Description { get; init; }
                 
+                [DataMember(Order = 4)]
+                public Another<TValue> Another {get; init; }
+                
                 public TValue CreatedAtSetter
                 {
                     get => CreatedAt;
                     set => CreatedAt = value;
                 }
+            }
+            
+            public class Another<T>
+                where T: struct
+            {
+                public T Container {get; init; }
             }
             """;
 

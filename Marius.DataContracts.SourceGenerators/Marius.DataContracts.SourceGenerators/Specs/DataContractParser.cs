@@ -958,26 +958,22 @@ internal sealed class DataContractParser
         if (type is INamedTypeSymbol namedTypeForOpenCheck && namedTypeForOpenCheck.IsGenericType)
         {
             isOpenGenericType = SymbolEqualityComparer.Default.Equals(namedTypeForOpenCheck, namedTypeForOpenCheck.ConstructedFrom);
+            if (!isOpenGenericType)
+                isOpenGenericType = namedTypeForOpenCheck.TypeArguments.Any(s => s.TypeKind == TypeKind.TypeParameter);
         }
 
         var isNullableValueType = false;
-        if (type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType)
-        {
+        if (type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType) 
             isNullableValueType = _context.KnownSymbols.IsNullable(namedTypeSymbol.ConstructedFrom);
-        }
 
         var specialType = ConvertSpecialType(type.SpecialType);
         var typeKind = ConvertTypeKind(type.TypeKind);
 
         TypeSpec? elementType = null;
         if (type is IArrayTypeSymbol arrayType)
-        {
             elementType = CreateTypeSpec(arrayType.ElementType);
-        }
-        else if (isNullableValueType && type is INamedTypeSymbol nullableType && nullableType.TypeArguments.Length > 0)
-        {
+        else if (isNullableValueType && type is INamedTypeSymbol nullableType && nullableType.TypeArguments.Length > 0) 
             elementType = CreateTypeSpec(nullableType.TypeArguments[0]);
-        }
 
         var constructedFromSpec = default(TypeSpec);
         var typeArguments = EquatableArray<TypeSpec>.Empty;
@@ -1006,6 +1002,10 @@ internal sealed class DataContractParser
                 constructedFromSpec = CreateTypeSpec(genericNamedType.ConstructedFrom);
         }
 
+        var typeParameterSpec = default(TypeParameterSpec);
+        if (type is ITypeParameterSymbol typeParameter) 
+            typeParameterSpec = CreateTypeParameterSpec(typeParameter, false);
+
         var isTypeSerializable = _context.IsTypeSerializable(type);
         var spec = new TypeSpec
         {
@@ -1022,6 +1022,7 @@ internal sealed class DataContractParser
             SpecialType = specialType,
             TypeKind = typeKind,
             ElementType = elementType,
+            TypeParameter = typeParameterSpec,
             ConstructedFrom = constructedFromSpec,
             TypeArguments = typeArguments,
             TypeParameters = typeParameters,
@@ -1029,6 +1030,22 @@ internal sealed class DataContractParser
 
         _typeSpecCache[type] = spec;
         return spec;
+    }
+
+    private static bool IsOpenGeneric(ITypeSymbol type)
+    {
+        if (type.TypeKind == TypeKind.TypeParameter)
+            return true;
+
+        if (type is INamedTypeSymbol namedType)
+        {
+            if (SymbolEqualityComparer.Default.Equals(namedType, namedType.ConstructedFrom))
+                return true;
+
+            return namedType.TypeArguments.Any(IsOpenGeneric);
+        }
+
+        return false;
     }
 
     private static SpecialTypeKind ConvertSpecialType(SpecialType specialType)
@@ -1065,6 +1082,7 @@ internal sealed class DataContractParser
             TypeKind.Interface => TypeKindSpec.Interface,
             TypeKind.Enum => TypeKindSpec.Enum,
             TypeKind.Delegate => TypeKindSpec.Delegate,
+            TypeKind.TypeParameter => TypeKindSpec.TypeParameter,
             _ => TypeKindSpec.Unknown,
         };
     }

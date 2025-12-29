@@ -1,3 +1,4 @@
+using System.Text;
 using Marius.DataContracts.SourceGenerators.Specs;
 using Microsoft.CodeAnalysis.CSharp;
 
@@ -77,18 +78,18 @@ internal class PrivateAccessorSpecGenerator
 
     private static string GetGenericAccessorClassKey(PrivateAccessorSpec accessor)
     {
-        var sb = new System.Text.StringBuilder();
-        sb.Append("Generic_");
-
+        var sb = new ValueStringBuilder(stackalloc char[256]);
         var constructedFrom = accessor.ContainingType.ConstructedFrom ?? accessor.ContainingType;
         if (constructedFrom.TypeParameters.Length > 0)
         {
-            sb.Append(constructedFrom.TypeParameters.Length).Append('_');
+            sb.Append(constructedFrom.TypeParameters.Length);
+            sb.Append('_');
             foreach (var tp in constructedFrom.TypeParameters)
             {
-                // Use ordinal for the key since names might differ between open/closed
-                sb.Append("_P");
+                sb.Append('_');
                 sb.Append(tp.Ordinal);
+                sb.Append('_');
+                sb.Append(tp.Name);
                 if (tp.HasValueTypeConstraint) sb.Append("_struct");
                 if (tp.HasReferenceTypeConstraint) sb.Append("_class");
                 if (tp.HasUnmanagedConstraint) sb.Append("_unmanaged");
@@ -107,16 +108,29 @@ internal class PrivateAccessorSpecGenerator
 
     private static void GenerateWrapperAccessor(CodeWriter writer, PrivateAccessorSpec accessor, string genericAccessorClassName)
     {
-        var allTypeParams = accessor.ContainingType.TypeParameters;
         var typeParamList = "";
         var constraintsClauses = "";
-        
-        if (allTypeParams.Length > 0)
+
+        var typeParameters = accessor.ContainingType.TypeParameters;
+        if (typeParameters.Length > 0)
         {
-            typeParamList = "<" + string.Join(", ", allTypeParams.Select(tp => tp.Name)) + ">";
-            constraintsClauses = GenerateConstraintsClauses(allTypeParams);
+            var sb = new ValueStringBuilder(stackalloc char[256]);
+            foreach (var item in typeParameters)
+            {
+                if (sb.Length == 0)
+                    sb.Append('<');
+                else
+                    sb.Append(", ");
+
+                sb.Append(item.Name);
+            }
+
+            sb.Append('>');
+
+            typeParamList = sb.ToString();
+            constraintsClauses = GenerateConstraintsClauses(typeParameters);
         }
-        
+
         var className = $"{genericAccessorClassName}{typeParamList}";
         switch (accessor.Kind)
         {
@@ -159,7 +173,7 @@ internal class PrivateAccessorSpecGenerator
                 return $"{modifier}{p.Name}";
             }));
         }
-    
+
         if (accessor.IsRegularConstructor)
         {
             writer.AppendLine($"[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
@@ -170,13 +184,13 @@ internal class PrivateAccessorSpecGenerator
         {
             var selfArg = $"{accessor.ContainingType.MaybeRef()}{accessor.ContainingType.FullyQualifiedName} self";
             var selfCallArg = accessor.ContainingType.IsValueType ? "ref self" : "self";
-    
+
             if (!string.IsNullOrEmpty(args))
             {
                 args = ", " + args;
                 callArgs = ", " + callArgs;
             }
-    
+
             writer.AppendLine($"[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
             if (accessor.Kind == PrivateAccessorKind.Constructor)
             {
@@ -195,7 +209,7 @@ internal class PrivateAccessorSpecGenerator
     {
         var selfArg = $"{accessor.ContainingType.MaybeRef()}{accessor.ContainingType.FullyQualifiedName} self";
         var selfCallArg = accessor.ContainingType.IsValueType ? "ref self" : "self";
-    
+
         writer.AppendLine($"[global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]");
         writer.AppendLine($"public static ref {accessor.ReturnType!.FullyQualifiedName} {accessor.Name}{typeParamList}({selfArg}){constraintsClauses}");
         writer.AppendLine($"    => ref {className}.{accessor.Name}({selfCallArg});");
@@ -215,7 +229,7 @@ internal class PrivateAccessorSpecGenerator
             var constraints = GenerateConstraintsClauses(typeParams);
             writer.AppendLine($"private static class {baseName}{typeParamList}{constraints}");
         }
-    
+
         using (writer.Block())
         {
             var needLine = false;
@@ -223,9 +237,9 @@ internal class PrivateAccessorSpecGenerator
             {
                 if (needLine)
                     writer.AppendLine();
-    
+
                 needLine = true;
-    
+
                 switch (accessor.Kind)
                 {
                     case PrivateAccessorKind.Constructor:
@@ -240,46 +254,58 @@ internal class PrivateAccessorSpecGenerator
         }
     }
 
-    private static string GenerateConstraintsClauses(IEnumerable<TypeParameterSpec> typeParams)
+    private static string GenerateConstraintsClauses(IEnumerable<TypeParameterSpec> typeParameters)
     {
-        var clauses = new List<string>();
-
-        foreach (var tp in typeParams)
+        var clauses = new ValueStringBuilder();
+        var constraints = new ValueStringBuilder();
+        foreach (var tp in typeParameters)
         {
-            var constraints = new List<string>();
+            var hasConstraint = false;
+
+            constraints.Append("where ");
+            constraints.Append(tp.Name);
+            constraints.Append(" : ");
 
             // Special constraints must come in specific order: class/struct/unmanaged first, then types, then new()
             if (tp.HasUnmanagedConstraint)
-                constraints.Add("unmanaged");
+                Append(ref constraints, "unmanaged", ref hasConstraint);
             else if (tp.HasValueTypeConstraint)
-                constraints.Add("struct");
+                Append(ref constraints, "struct", ref hasConstraint);
             else if (tp.HasReferenceTypeConstraint)
-                constraints.Add(tp.HasReferenceTypeConstraintNullable ? "class?" : "class");
+                Append(ref constraints, tp.HasReferenceTypeConstraintNullable ? "class?" : "class", ref hasConstraint);
 
             if (tp.HasNotNullConstraint && !tp.HasValueTypeConstraint && !tp.HasReferenceTypeConstraint)
-                constraints.Add("notnull");
+                Append(ref constraints, "notnull", ref hasConstraint);
 
             // Type constraints
-            foreach (var c in tp.Constraints)
-            {
-                if (c.Kind == TypeConstraintKind.TypeParameter)
-                    constraints.Add(c.ConstraintTypeFullName!);
-                else
-                    constraints.Add(c.ConstraintTypeFullName!);
-            }
+            foreach (var c in tp.Constraints) 
+                Append(ref constraints, c.ConstraintTypeFullName!, ref hasConstraint);
 
             // new() must come last
             if (tp.HasConstructorConstraint && !tp.HasValueTypeConstraint && !tp.HasUnmanagedConstraint)
-                constraints.Add("new()");
+                Append(ref constraints, "new()", ref hasConstraint);
 
-            if (constraints.Count > 0)
-                clauses.Add($"where {tp.Name} : {string.Join(", ", constraints)}");
+            if (hasConstraint)
+            {
+                clauses.Append(' ');
+                clauses.Append(constraints.GetStringAndClear());
+            }
         }
 
-        if (clauses.Count == 0)
+        constraints.Dispose();
+        if (clauses.Length == 0)
             return "";
 
-        return " " + string.Join(" ", clauses);
+        return clauses.ToString();
+
+        static void Append(ref ValueStringBuilder sb, string value, ref bool needComma)
+        {
+            if (needComma)
+                sb.Append(", ");
+
+            sb.Append(value);
+            needComma = true;
+        }
     }
 
     private static void GenerateMethodAccessor(CodeWriter writer, PrivateAccessorSpec accessor)

@@ -112,7 +112,7 @@ class Program
             return false;
         }
 
-        for (int i = 0; i < attrs1.Count; i++)
+        for (var i = 0; i < attrs1.Count; i++)
         {
             if (attrs1[i].Name != attrs2[i].Name || attrs1[i].Value != attrs2[i].Value)
             {
@@ -146,7 +146,7 @@ class Program
             return false;
         }
 
-        for (int i = 0; i < elements1.Count; i++)
+        for (var i = 0; i < elements1.Count; i++)
         {
             if (!AreXmlSemanticallyEquivalent(elements1[i], elements2[i]))
             {
@@ -192,6 +192,24 @@ public class IpRange<T, TT>
     public required TT To { get; init; }
 }
 
+[DataContract]
+public class Another<TK, TV>
+    where TK : struct
+    where TV : struct, INumber<TV>
+{
+    [DataMember]
+    private TK Key;
+
+    [DataMember]
+    public required TV Value { get; init; }
+
+    public required TK KeySetter
+    {
+        get => Key;
+        set => Key = value;
+    }
+}
+
 [DataContract(Name = "S", Namespace = "SourceGenerator.Tests")]
 [KnownType(typeof(uint[]))]
 public class SimpleContract
@@ -210,6 +228,9 @@ public class SimpleContract
 
     [DataMember]
     public IpRange<int, decimal>? Range { get; set; }
+
+    [DataMember]
+    public Another<int, decimal>? Another { get; set; }
 
     private SortedDictionary<string, LocalName>? _keyedNames;
 
@@ -234,13 +255,13 @@ public enum Status
 {
     [EnumMember(Value = "UNKNOWN")]
     Unknown = 0,
-    
+
     [EnumMember(Value = "RUNNING")]
     Running = 1,
-    
+
     [EnumMember(Value = "STOPPED")]
     Stopped = 2,
-    
+
     [EnumMember(Value = "PAUSED")]
     Paused = 3,
 }

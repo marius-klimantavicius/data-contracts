@@ -20,6 +20,8 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
 
     public TypeSpec? ElementType { get; init; }
 
+    public required TypeParameterSpec? TypeParameter { get; init; }
+
     public required TypeSpec? ConstructedFrom { get; init; }
     public required EquatableArray<TypeParameterSpec> TypeParameters { get; init; }
     public required EquatableArray<TypeSpec> TypeArguments { get; init; }
@@ -40,6 +42,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
             SpecialType == other.SpecialType &&
             TypeKind == other.TypeKind &&
             Equals(ElementType, other.ElementType) &&
+            TypeParameter == other.TypeParameter &&
             ConstructedFrom?.Equals(other.ConstructedFrom) == true &&
             TypeParameters.Equals(other.TypeParameters) &&
             TypeArguments.Equals(other.TypeArguments);
@@ -62,6 +65,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
             hashCode = (hashCode * 397) ^ (int)SpecialType;
             hashCode = (hashCode * 397) ^ (int)TypeKind;
             hashCode = (hashCode * 397) ^ (ElementType?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (TypeParameter?.GetHashCode() ?? 0);
             hashCode = (hashCode * 397) ^ (ConstructedFrom?.GetHashCode() ?? 0);
             hashCode = (hashCode * 397) ^ TypeParameters.GetHashCode();
             hashCode = (hashCode * 397) ^ TypeArguments.GetHashCode();
@@ -113,4 +117,5 @@ internal enum TypeKindSpec
     Interface,
     Enum,
     Delegate,
+    TypeParameter,
 }
