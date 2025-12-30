@@ -7,6 +7,7 @@ internal abstract class DataContractSpec : IEquatable<DataContractSpec>
 {
     public required int Id { get; init; }
     public required string GeneratedName { get; init; }
+    public required string TypeInfoPropertyName { get; init; }
     public required TypeSpec UnderlyingType { get; init; }
     public required TypeSpec OriginalUnderlyingType { get; init; }
     public required string Name { get; init; }

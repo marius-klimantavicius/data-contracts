@@ -1,4 +1,5 @@
 using System.Collections.Frozen;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Marius.DataContracts.Runtime;
 
@@ -33,23 +34,8 @@ public class DataContractProvider : IDataContractProvider
         return _typeDataContracts.GetValueOrDefault(type);
     }
 
-    public DataContract GetDataContract(Type type)
+    public bool TryGetDataContract(Type type, [NotNullWhen(true)] out DataContract? dataContract)
     {
-        if (_typeDataContracts.TryGetValue(type, out var value))
-            return value;
-
-        throw new InvalidOperationException($"DataContract for type {type.FullName} not found.");
-    }
-
-    public DataContract GetDataContract(RuntimeTypeHandle typeHandle, Type? type)
-    {
-        type ??= Type.GetTypeFromHandle(typeHandle)!;
-        return GetDataContract(type);
-    }
-
-    public DataContract GetDataContractSkipValidation(RuntimeTypeHandle typeHandle, Type? type)
-    {
-        type ??= Type.GetTypeFromHandle(typeHandle)!;
-        return GetDataContract(type);
+        return _typeDataContracts.TryGetValue(type, out dataContract);
     }
 }

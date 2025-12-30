@@ -3,6 +3,8 @@ using System.Runtime.Serialization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
+using Marius.DataContracts.Runtime;
+using DataContractSerializer = System.Runtime.Serialization.DataContractSerializer;
 
 namespace Marius.DataContracts.Playground;
 
@@ -30,6 +32,7 @@ class Program
                 { "Second", new LocalName { Id = 2, Key = "Two" } },
             },
             Data = ("hello"u8).ToArray(),
+            Raw = XElement.Parse("<div><span class='i'></span> Hello</div>"),
             InnerTypes =
             [
                 new LocalName.InnerType<decimal> { Price = 12.34M },
@@ -39,7 +42,7 @@ class Program
             Status = Status.Paused,
         };
 
-        var localSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(new Runtime.DataContractProvider(Runtime.DataContractContext.DataContracts, Runtime.DataContractContext.TypeDataContracts), typeof(SimpleContract));
+        var localSerializer = DataContractContext.GetSerializer<SimpleContract>();
         var netSerializer = new DataContractSerializer(typeof(SimpleContract), new Type[] { typeof(uint[]) });
 
         // Serialize with System.Runtime.Serialization.DataContractSerializer
@@ -230,6 +233,13 @@ public class SimpleContract
 
     [DataMember]
     public Another<int, decimal>? Another { get; set; }
+
+    [DataMember]
+    public Another<short, double>? Another2 { get; set; }
+
+    [DataMember]
+    [JsonIgnore]
+    public XElement? Raw { get; set; }
 
     private SortedDictionary<string, LocalName>? _keyedNames;
 

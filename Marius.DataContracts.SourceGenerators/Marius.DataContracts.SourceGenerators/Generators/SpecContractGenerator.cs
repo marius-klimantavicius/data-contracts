@@ -1,4 +1,5 @@
 using Marius.DataContracts.SourceGenerators.Specs;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 namespace Marius.DataContracts.SourceGenerators.Generators;
@@ -8,8 +9,10 @@ namespace Marius.DataContracts.SourceGenerators.Generators;
 /// </summary>
 internal abstract class SpecContractGenerator
 {
-    private readonly CodeWriter _writer;
+    private CodeWriter _writer;
 
+    protected CodeWriter Writer => _writer;
+    
     protected DataContractSetSpec ContractSet { get; }
 
     protected SpecContractGenerator(CodeWriter writer, DataContractSetSpec contractSet)
@@ -19,10 +22,16 @@ internal abstract class SpecContractGenerator
     }
 
     public abstract void DeclareDataContract();
-    public abstract (string localName, string? underlyingTypeOverride) GenerateDataContract(string xmlDictionary);
+    public abstract (string localName, string? underlyingTypeOverride) GenerateDataContract(SourceProductionContext context, string xmlDictionary);
     public abstract void GenerateDependencies(string xmlDictionary);
 
     protected CodeWriter.IndentDisposable Block(string start = "{", string end = "}") => _writer.Block(start, end);
+
+    protected WriterDisposable NewWriter()
+    {
+        _writer = new CodeWriter(_writer);
+        return new WriterDisposable(this);
+    }
 
     protected void AppendLine() => _writer.AppendLine();
     protected void AppendLine(string value) => _writer.AppendLine(value);
@@ -237,5 +246,19 @@ internal abstract class SpecContractGenerator
             return null;
 
         return ContractSet.Contracts[id];
+    }
+    
+    public struct WriterDisposable: IDisposable
+    {
+        private SpecContractGenerator _generator;
+        public WriterDisposable(SpecContractGenerator generator)
+        {
+            _generator = generator;
+        }
+
+        public void Dispose()
+        {
+            _generator._writer = _generator._writer.Parent!;
+        }
     }
 }

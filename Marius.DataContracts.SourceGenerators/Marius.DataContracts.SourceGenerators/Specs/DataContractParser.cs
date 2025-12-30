@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Serialization;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Marius.DataContracts.SourceGenerators.DataContracts;
@@ -70,16 +71,6 @@ internal sealed class DataContractParser
             var contract = _context.DataContracts[i];
             if (contract != null)
                 _contractToId[contract] = i;
-        }
-
-        // Set context class location from first contract
-        for (var i = 0; i < _context.DataContracts.Length; i++)
-        {
-            var contract = _context.DataContracts[i];
-            if (contract?.UnderlyingType != null)
-            {
-                break;
-            }
         }
 
         // Create specs
@@ -300,7 +291,7 @@ internal sealed class DataContractParser
         };
     }
 
-    private static string Escape(string input)
+    public static string Escape(string input)
     {
         if (SyntaxFacts.IsValidIdentifier(input))
             return input;
@@ -362,8 +353,6 @@ internal sealed class DataContractParser
             }
         }
     }
-
-    private string GetGeneratedName(int id) => $"__contract{id}";
 
     private DataContractSpec? CreateSpec(DataContract contract, int id)
     {
@@ -459,10 +448,12 @@ internal sealed class DataContractParser
             }
         }
 
+        var typeInfoPropertyName = GetTypeInfoPropertyName(contract.UnderlyingType);
         return new ClassDataContractSpec
         {
             Id = id,
-            GeneratedName = GetGeneratedName(id),
+            GeneratedName = typeInfoPropertyName,
+            TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSpec,
             Name = contract.Name,
@@ -567,10 +558,12 @@ internal sealed class DataContractParser
             }
         }
 
+        var typeInfoPropertyName = GetTypeInfoPropertyName(contract.UnderlyingType);
         return new CollectionDataContractSpec
         {
             Id = id,
-            GeneratedName = GetGeneratedName(id),
+            GeneratedName = typeInfoPropertyName,
+            TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
             Name = contract.Name,
@@ -625,10 +618,12 @@ internal sealed class DataContractParser
         if (contract.Values != null)
             values.AddRange(contract.Values);
 
+        var typeInfoPropertyName = GetTypeInfoPropertyName(contract.UnderlyingType);
         return new EnumDataContractSpec
         {
             Id = id,
-            GeneratedName = GetGeneratedName(id),
+            GeneratedName = typeInfoPropertyName,
+            TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
             Name = contract.Name,
@@ -662,13 +657,18 @@ internal sealed class DataContractParser
         var originalUnderlyingTypeSec = CreateTypeSpec(contract.OriginalUnderlyingType);
 
         var interfaceTypeSpec = default(TypeSpec);
+        var typeInfoPropertyName = GetTypeInfoPropertyName(contract.UnderlyingType);
         if (contract is InterfaceDataContract interfaceDataContract)
+        {
             interfaceTypeSpec = CreateTypeSpec(interfaceDataContract.InterfaceType);
+            typeInfoPropertyName = GetTypeInfoPropertyName(interfaceDataContract.InterfaceType);
+        }
 
         return new PrimitiveDataContractSpec
         {
             Id = id,
-            GeneratedName = GetGeneratedName(id),
+            GeneratedName = typeInfoPropertyName,
+            TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
             Name = contract.Name,
@@ -783,10 +783,12 @@ internal sealed class DataContractParser
             }
             : null;
 
+        var typeInfoPropertyName = GetTypeInfoPropertyName(contract.UnderlyingType);
         return new XmlDataContractSpec
         {
             Id = id,
-            GeneratedName = GetGeneratedName(id),
+            GeneratedName = typeInfoPropertyName,
+            TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
             Name = contract.Name,
@@ -1085,5 +1087,31 @@ internal sealed class DataContractParser
             TypeKind.TypeParameter => TypeKindSpec.TypeParameter,
             _ => TypeKindSpec.Unknown,
         };
+    }
+
+    private static string GetTypeInfoPropertyName(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol arrayType)
+        {
+            var rank = arrayType.Rank;
+            var suffix = rank == 1 ? "Array" : $"Array{rank}D"; // Array, Array2D, Array3D, ...
+            return GetTypeInfoPropertyName(arrayType.ElementType) + suffix;
+        }
+ 
+        if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)
+            return type.Name;
+ 
+        var sb = new ValueStringBuilder();
+        var name = namedType.Name;
+ 
+        sb.Append(name);
+ 
+        if (namedType.GetAllTypeArgumentsInScope() is List<ITypeSymbol> typeArgsInScope)
+        {
+            foreach (var genericArg in typeArgsInScope) 
+                sb.Append(GetTypeInfoPropertyName(genericArg));
+        }
+ 
+        return sb.ToString();
     }
 }

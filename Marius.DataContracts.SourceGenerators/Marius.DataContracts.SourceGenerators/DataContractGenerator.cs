@@ -303,6 +303,7 @@ public class DataContractGenerator : IIncrementalGenerator
             writer.AppendLine();
             writer.AppendLine("public static readonly global::Marius.DataContracts.Runtime.DataContract[] DataContracts;");
             writer.AppendLine("public static readonly global::System.Collections.Frozen.FrozenDictionary<global::System.Type, global::Marius.DataContracts.Runtime.DataContract> TypeDataContracts;");
+            writer.AppendLine("public static readonly global::Marius.DataContracts.Runtime.DataContractProvider DataContractProvider;");
 
             writer.AppendLine();
             writer.AppendLine("static DataContractContext()");
@@ -317,7 +318,7 @@ public class DataContractGenerator : IIncrementalGenerator
                 var contractLocals = new List<(string local, string? underlyingTypeOverride)>();
                 foreach (var item in generators)
                 {
-                    var local = item.GenerateDataContract(xmlDictionary);
+                    var local = item.GenerateDataContract(context, xmlDictionary);
                     if (!string.IsNullOrEmpty(local.localName))
                         contractLocals.Add(local);
                 }
@@ -340,6 +341,46 @@ public class DataContractGenerator : IIncrementalGenerator
                 writer.AppendLine();
                 foreach (var item in generators)
                     item.GenerateDependencies(xmlDictionary);
+
+                writer.AppendLine();
+                writer.AppendLine("DataContractProvider = new global::Marius.DataContracts.Runtime.DataContractProvider(DataContracts, TypeDataContracts);");
+            }
+
+            writer.AppendLine();
+            writer.AppendLine($"public static global::Marius.DataContracts.Runtime.DataContractSerializer GetSerializer<T>()");
+            using (writer.Block())
+            {
+                writer.AppendLine("if (!TypeDataContracts.TryGetValue(typeof(T), out var dataContract))");
+                writer.AppendLine("    ThrowValidationException($\"Type '{typeof(T).FullName}' does not have a registered DataContract.\");");
+
+                writer.AppendLine("return new global::Marius.DataContracts.Runtime.DataContractSerializer(DataContractProvider, typeof(T));");
+            }
+
+            writer.AppendLine();
+            writer.AppendLine($"public static global::Marius.DataContracts.Runtime.DataContractSerializer GetSerializer(global::System.Type type)");
+            using (writer.Block())
+            {
+                writer.AppendLine("global::System.ArgumentNullException.ThrowIfNull(type);");
+                writer.AppendLine();
+
+                writer.AppendLine("if (!TypeDataContracts.TryGetValue(type, out var dataContract))");
+                writer.AppendLine("    ThrowValidationException($\"Type '{type.FullName}' does not have a registered DataContract.\");");
+
+                writer.AppendLine("return new global::Marius.DataContracts.Runtime.DataContractSerializer(DataContractProvider, type);");
+            }
+
+            writer.AppendLine();
+            writer.AppendLine($"public static global::Marius.DataContracts.Runtime.DataContractSerializer GetSerializer(global::Marius.DataContracts.Runtime.DataContract dataContract)");
+            using (writer.Block())
+            {
+                writer.AppendLine("global::System.ArgumentNullException.ThrowIfNull(dataContract);");
+                writer.AppendLine();
+
+                writer.AppendLine("if (dataContract.Id >= 0 && dataContract.Id < DataContracts.Length && ReferenceEquals(dataContract, DataContracts[dataContract.Id]))");
+                writer.AppendLine("    return new global::Marius.DataContracts.Runtime.DataContractSerializer(DataContractProvider, dataContract);");
+                writer.AppendLine();
+
+                writer.AppendLine("throw new global::System.InvalidOperationException(\"The provided DataContract is not registered in this DataContractContext.\");");
             }
 
             writer.AppendLine();

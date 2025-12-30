@@ -87,6 +87,15 @@ internal partial class DataContractContext
         return _dataContractCache[id] ??= factory();
     }
 
+    private void SetId(ITypeSymbol symbol, int id)
+    {
+        symbol = UnwrapNullableType(symbol);
+        lock (_cacheLock)
+        {
+            _symbolToIdCache[symbol] = id;
+        }
+    }
+
     internal int GetId(ITypeSymbol symbol)
     {
         symbol = UnwrapNullableType(symbol);
@@ -161,10 +170,9 @@ internal partial class DataContractContext
 
     private DataContract CreateGetOnlyCollectionDataContract(int id, ITypeSymbol type)
     {
-        DataContract? dataContract = null;
         lock (_createDataContractLock)
         {
-            dataContract = _dataContractCache[id];
+            var dataContract = _dataContractCache[id];
             if (dataContract == null)
             {
                 type = UnwrapNullableType(type);
@@ -174,9 +182,9 @@ internal partial class DataContractContext
 
                 AssignDataContractToId(dataContract, id);
             }
-        }
 
-        return dataContract;
+            return dataContract;
+        }
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -242,7 +250,11 @@ internal partial class DataContractContext
         {
             contract = _typeToBuiltInContract.GetOrAdd(type, key =>
             {
-                return new InterfaceDataContract(this, key);
+                var dataContract = new InterfaceDataContract(this, key);
+                var id = GetId(key);
+                AssignDataContractToId(dataContract, id);
+
+                return dataContract;
             });
         }
         else
@@ -250,14 +262,23 @@ internal partial class DataContractContext
             contract = _typeToBuiltInContract.GetOrAdd(type, key =>
             {
                 TryCreateBuiltInDataContract(key, out var dataContract);
+                if (dataContract != null)
+                {
+                    if (SymbolEqualityComparer.Default.Equals(key, dataContract.UnderlyingType))
+                    {
+                        var id = GetId(key);
+                        AssignDataContractToId(dataContract, id);
+                    }
+                    else
+                    {
+                        var id = GetId(dataContract.UnderlyingType);
+                        AssignDataContractToId(dataContract, id);
+                        SetId(key, id);
+                    }
+                }
+
                 return dataContract;
             });
-        }
-
-        if (contract != null)
-        {
-            var id = GetId(type);
-            AssignDataContractToId(contract, id);
         }
 
         return contract;
@@ -332,7 +353,7 @@ internal partial class DataContractContext
                 dataContract = new SpecialTypeDataContract(this, type);
                 break;
             case SpecialType.System_Array:
-                dataContract = new CollectionDataContract(this, KnownSymbols.ObjectArrayType);
+                dataContract = GetOrAddDataContract(KnownSymbols.ObjectArrayType, () => new CollectionDataContract(this, KnownSymbols.ObjectArrayType));
                 break;
             default:
                 var cmp = SymbolEqualityComparer.Default;

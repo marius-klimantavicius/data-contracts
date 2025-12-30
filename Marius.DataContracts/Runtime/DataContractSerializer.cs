@@ -39,6 +39,11 @@ public sealed class DataContractSerializer : XmlObjectSerializer
         return true;
     }
 
+    public DataContractSerializer(IDataContractProvider dataContractProvider, DataContract dataContract)
+        : this(dataContractProvider, dataContract.UnderlyingType, null, int.MaxValue, false, false)
+    {
+    }
+
     public DataContractSerializer(IDataContractProvider dataContractProvider, Type type, IEnumerable<Type>? knownTypes = null)
         : this(dataContractProvider, type, knownTypes, int.MaxValue, false, false)
     {

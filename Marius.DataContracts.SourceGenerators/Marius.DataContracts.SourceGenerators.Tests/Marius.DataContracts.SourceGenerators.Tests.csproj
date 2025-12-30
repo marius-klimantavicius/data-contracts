@@ -23,8 +23,8 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="..\..\Marius.DataContracts\Marius.DataContracts.csproj" />
         <ProjectReference Include="..\Marius.DataContracts.SourceGenerators\Marius.DataContracts.SourceGenerators.csproj" />
-        <ProjectReference Include="..\..\Marius.DataContracts.Playground\Marius.DataContracts.Playground.csproj" />
     </ItemGroup>
 
 

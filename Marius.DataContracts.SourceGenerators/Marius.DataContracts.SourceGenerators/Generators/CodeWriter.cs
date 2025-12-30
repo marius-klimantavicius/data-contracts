@@ -9,6 +9,21 @@ public class CodeWriter
     private int _indent;
     private string _indentValue = "";
 
+    private readonly HashSet<string> _fileNames;
+
+    public CodeWriter? Parent { get; }
+    
+    public CodeWriter()
+    {
+        _fileNames = new HashSet<string>();
+    }
+
+    public CodeWriter(CodeWriter parent)
+    {
+        Parent = parent;
+        _fileNames = parent._fileNames;
+    }
+
     public IndentDisposable Indent()
     {
         var result = new IndentDisposable(this, null);
@@ -55,9 +70,25 @@ public class CodeWriter
         return _sb.ToString();
     }
 
+    public string LocalName(string prefix)
+    {
+        if (Parent != null)
+            return $"{prefix}{Parent._nameIndex++}";
 
-    public string LocalName(string prefix) => $"{prefix}{_nameIndex++}";
-    
+        return $"{prefix}{_nameIndex++}";
+    }
+
+    public string FileName(string hintName)
+    {
+        if (!_fileNames.Add(hintName))
+        {
+            hintName = LocalName(hintName);
+            _fileNames.Add(hintName);
+        }
+
+        return hintName;
+    }
+
     public readonly struct IndentDisposable : IDisposable
     {
         private readonly CodeWriter _generator;
