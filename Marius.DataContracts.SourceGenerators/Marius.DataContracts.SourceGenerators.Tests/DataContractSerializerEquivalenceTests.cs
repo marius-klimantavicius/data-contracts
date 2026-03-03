@@ -1540,4 +1540,265 @@ public class DataContractSerializerEquivalenceTests
         Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
         Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
     }
+
+    /// <summary>
+    /// Tests serialization of primitive arrays that use the bulk XmlWriter path
+    /// (bool[], DateTime[], decimal[], int[], long[], float[], double[]).
+    /// These go through TryWritePrimitiveArray and bypass per-element WritePrimitive.
+    /// </summary>
+    [Fact]
+    public async Task PrimitiveBulkArrays_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "BulkArrays", Namespace = "http://test.contracts")]
+            public class BulkArraysContract
+            {
+                [DataMember(Order = 1)]
+                public bool[] Booleans { get; set; } = Array.Empty<bool>();
+
+                [DataMember(Order = 2)]
+                public DateTime[] DateTimes { get; set; } = Array.Empty<DateTime>();
+
+                [DataMember(Order = 3)]
+                public decimal[] Decimals { get; set; } = Array.Empty<decimal>();
+
+                [DataMember(Order = 4)]
+                public int[] Integers { get; set; } = Array.Empty<int>();
+
+                [DataMember(Order = 5)]
+                public long[] Longs { get; set; } = Array.Empty<long>();
+
+                [DataMember(Order = 6)]
+                public float[] Floats { get; set; } = Array.Empty<float>();
+
+                [DataMember(Order = 7)]
+                public double[] Doubles { get; set; } = Array.Empty<double>();
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.BulkArraysContract
+            {
+                Booleans = new bool[] { true, false, true },
+                DateTimes = new DateTime[] { new DateTime(2025, 1, 1, 0, 0, 0, DateTimeKind.Utc), new DateTime(2025, 6, 15, 12, 30, 0, DateTimeKind.Utc) },
+                Decimals = new decimal[] { 1.1m, 2.2m, 3.3m },
+                Integers = new int[] { 1, -2, int.MaxValue, int.MinValue },
+                Longs = new long[] { 100L, long.MaxValue },
+                Floats = new float[] { 1.5f, -2.5f },
+                Doubles = new double[] { 1.5, 2.7, 3.14 }
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.BulkArraysContract));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
+
+    /// <summary>
+    /// Tests serialization of primitive arrays that use the per-element WritePrimitive path
+    /// (short[], byte[], sbyte[], char[], ushort[], uint[], ulong[]).
+    /// These are the value types NOT handled by TryWritePrimitiveArray and exercise the
+    /// name/namespace parameter ordering fix.
+    /// </summary>
+    [Fact]
+    public async Task PrimitivePerElementValueTypeArrays_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "PerElementArrays", Namespace = "http://test.contracts")]
+            public class PerElementArraysContract
+            {
+                [DataMember(Order = 1)]
+                public short[] Shorts { get; set; } = Array.Empty<short>();
+
+                [DataMember(Order = 2)]
+                public byte[] Bytes { get; set; } = Array.Empty<byte>();
+
+                [DataMember(Order = 3)]
+                public sbyte[] SignedBytes { get; set; } = Array.Empty<sbyte>();
+
+                [DataMember(Order = 4)]
+                public char[] Chars { get; set; } = Array.Empty<char>();
+
+                [DataMember(Order = 5)]
+                public ushort[] UnsignedShorts { get; set; } = Array.Empty<ushort>();
+
+                [DataMember(Order = 6)]
+                public uint[] UnsignedInts { get; set; } = Array.Empty<uint>();
+
+                [DataMember(Order = 7)]
+                public ulong[] UnsignedLongs { get; set; } = Array.Empty<ulong>();
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.PerElementArraysContract
+            {
+                Shorts = new short[] { 10, -20, 30 },
+                Bytes = new byte[] { 0, 128, 255 },
+                SignedBytes = new sbyte[] { -128, 0, 127 },
+                Chars = new char[] { 'A', 'Z', '0' },
+                UnsignedShorts = new ushort[] { 0, 1000, 65535 },
+                UnsignedInts = new uint[] { 0, 42, uint.MaxValue },
+                UnsignedLongs = new ulong[] { 0, 100, ulong.MaxValue }
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.PerElementArraysContract));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
+
+    /// <summary>
+    /// Tests serialization of primitive reference type arrays (string[], Uri[]).
+    /// These use the context.WriteMethodName code path in WritePrimitive.
+    /// </summary>
+    [Fact]
+    public async Task PrimitiveReferenceTypeArrays_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "RefTypeArrays", Namespace = "http://test.contracts")]
+            public class RefTypeArraysContract
+            {
+                [DataMember(Order = 1)]
+                public string[] Strings { get; set; } = Array.Empty<string>();
+
+                [DataMember(Order = 2)]
+                public Uri[] Uris { get; set; } = Array.Empty<Uri>();
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.RefTypeArraysContract
+            {
+                Strings = new string[] { "hello", "world", "test" },
+                Uris = new Uri[] { new Uri("https://example.com"), new Uri("https://test.org/path") }
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.RefTypeArraysContract));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
+
+    /// <summary>
+    /// Tests serialization of Guid[] and TimeSpan[] arrays.
+    /// These are struct types that go through per-element WritePrimitive.
+    /// </summary>
+    [Fact]
+    public async Task PrimitiveGuidAndTimeSpanArrays_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "GuidTimeSpanArrays", Namespace = "http://test.contracts")]
+            public class GuidTimeSpanArraysContract
+            {
+                [DataMember(Order = 1)]
+                public Guid[] Guids { get; set; } = Array.Empty<Guid>();
+
+                [DataMember(Order = 2)]
+                public TimeSpan[] TimeSpans { get; set; } = Array.Empty<TimeSpan>();
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.GuidTimeSpanArraysContract
+            {
+                Guids = new Guid[] { Guid.Parse("12345678-1234-1234-1234-123456789abc"), Guid.Empty },
+                TimeSpans = new TimeSpan[] { TimeSpan.FromHours(1), TimeSpan.FromMinutes(30), TimeSpan.Zero }
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.GuidTimeSpanArraysContract));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
+
+    /// <summary>
+    /// Tests serialization of primitive arrays mixed with scalar members
+    /// to ensure no regression on non-array members.
+    /// Uses short[] (per-element path) to exercise the name/namespace fix.
+    /// </summary>
+    [Fact]
+    public async Task PrimitiveArraysWithScalarMembers_SerializesEquivalently()
+    {
+        var dataContractCode = """
+            using System;
+            using System.Runtime.Serialization;
+
+            namespace TestContracts;
+
+            [DataContract(Name = "MixedMembers", Namespace = "http://test.contracts")]
+            public class MixedMembersContract
+            {
+                [DataMember(Order = 1)]
+                public string Label { get; set; } = "";
+
+                [DataMember(Order = 2)]
+                public int[] Values { get; set; } = Array.Empty<int>();
+
+                [DataMember(Order = 3)]
+                public int ScalarValue { get; set; }
+
+                [DataMember(Order = 4)]
+                public short[] Ratings { get; set; } = Array.Empty<short>();
+
+                [DataMember(Order = 5)]
+                public bool Flag { get; set; }
+            }
+            """;
+
+        var testCode = """
+            var original = new TestContracts.MixedMembersContract
+            {
+                Label = "test",
+                Values = new int[] { 10, 20, 30 },
+                ScalarValue = 42,
+                Ratings = new short[] { 1, 2, 3, 4, 5 },
+                Flag = true
+            };
+
+            return SerializationTestRunner.RunTest(original, typeof(TestContracts.MixedMembersContract));
+            """;
+
+        var result = await RunSerializationTest(dataContractCode, testCode);
+
+        Assert.True(result.Success, result.ErrorMessage);
+        Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
+        Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
+    }
 }
