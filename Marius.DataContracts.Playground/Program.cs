@@ -1,7 +1,9 @@
 ﻿using System.Numerics;
 using System.Runtime.Serialization;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Xml;
 using System.Xml.Linq;
 using Marius.DataContracts.Runtime;
 using DataContractSerializer = System.Runtime.Serialization.DataContractSerializer;
@@ -14,7 +16,8 @@ class Program
     {
         var value = new SimpleContract
         {
-            Names = ["hello", "world", "2025"],
+            Names = ["hello", "wor\x01ld", "2025"],
+            VV = [22, 33, 44],
             LocalName = new LocalName
             {
                 Key = Guid.NewGuid().ToString(),
@@ -58,14 +61,19 @@ class Program
         var localXml = await new StreamReader(localStream).ReadToEndAsync();
 
         // Parse both XMLs to XElement for semantic comparison
-        var netXElement = XElement.Parse(netXml);
-        var localXElement = XElement.Parse(localXml);
+        var readerSettings = new XmlReaderSettings { CheckCharacters = false };
+
+        using var netReader = XmlReader.Create(new StringReader(netXml), readerSettings);
+        var netXElement = XElement.Load(netReader);
+
+        using var localReader = XmlReader.Create(new StringReader(localXml), readerSettings);
+        var localXElement = XElement.Load(localReader);
 
         Console.WriteLine("=== System.Runtime.Serialization.DataContractSerializer XML ===");
-        Console.WriteLine(netXElement.ToString(SaveOptions.None));
+        Console.WriteLine(XElementToString(netXElement));
         Console.WriteLine();
         Console.WriteLine("=== Marius.DataContracts.Runtime.DataContractSerializer XML ===");
-        Console.WriteLine(localXElement.ToString(SaveOptions.None));
+        Console.WriteLine(XElementToString(localXElement));
         Console.WriteLine();
 
         // Check if XMLs are semantically equivalent
@@ -80,6 +88,21 @@ class Program
         Console.WriteLine();
         Console.WriteLine("=== Deserialized object (from .NET serialized XML) ===");
         Console.WriteLine(JsonSerializer.Serialize(readObject, JsonContext.Default.SimpleContract));
+    }
+
+    static string XElementToString(XElement element, SaveOptions options = SaveOptions.None)
+    {
+        var sb = new StringBuilder();
+        var writerSettings = new XmlWriterSettings
+        {
+            CheckCharacters = false,
+            OmitXmlDeclaration = true,
+            Indent = (options & SaveOptions.DisableFormatting) == 0,
+        };
+        using var writer = XmlWriter.Create(sb, writerSettings);
+        element.WriteTo(writer);
+        writer.Flush();
+        return sb.ToString();
     }
 
     /// <summary>
@@ -217,7 +240,13 @@ public class Another<TK, TV>
 public class SimpleContract
 {
     [DataMember]
-    public required List<string> Names { get; set; }
+    public required string[] Names { get; set; }
+
+    [DataMember]
+    public int[]? Inties { get; set; }
+
+    [DataMember]
+    public short[]? VV { get; set; }
 
     [DataMember]
     public Uri? Target { get; set; }

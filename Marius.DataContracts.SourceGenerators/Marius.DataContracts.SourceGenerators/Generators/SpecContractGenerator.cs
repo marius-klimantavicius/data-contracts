@@ -217,9 +217,9 @@ internal abstract class SpecContractGenerator
     protected void WritePrimitive(PrimitiveDataContractSpec primitiveContract, string memberValue, string ns, string name)
     {
         if (primitiveContract.UnderlyingType.IsValueType)
-            AppendLine($"xmlWriter.{primitiveContract.WriteMethodName}({memberValue}, {ns}, {name});");
+            AppendLine($"xmlWriter.{primitiveContract.WriteMethodName}({memberValue}, {name}, {ns});");
         else
-            AppendLine($"context.{primitiveContract.WriteMethodName}(xmlWriter, {memberValue}, {ns}, {name});");
+            AppendLine($"context.{primitiveContract.WriteMethodName}(xmlWriter, {memberValue}, {name}, {ns});");
 
     }
 
