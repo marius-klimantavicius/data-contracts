@@ -55,7 +55,12 @@ public class DataContractGenerator : IIncrementalGenerator
             dataContractContext.GetDataContract(knownSymbols.UriType!);
             dataContractContext.GetDataContract(knownSymbols.ByteArrayType!);
 
-            foreach (var symbol in array.OrderBy(s => s.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)))
+            // Framework adapters must also be available as standalone roots. Their
+            // presence in the provider does not make them scoped known types.
+            dataContractContext.GetDataContract(knownSymbols.DateTimeOffsetType!);
+            dataContractContext.GetDataContract(knownSymbols.MemoryStreamType!);
+
+            foreach (var symbol in array.OrderBy(s => s.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal))
             {
                 if (symbol is not INamedTypeSymbol type)
                     continue;
@@ -249,6 +254,8 @@ public class DataContractGenerator : IIncrementalGenerator
             context.ReportDiagnostic(diagnostic.CreateDiagnostic());
 
         var writer = new CodeWriter();
+        writer.ReserveNames(contractSet.Contracts.Where(contract => contract != null).Select(contract => contract.GeneratedName));
+
         var generators = new List<SpecContractGenerator>();
         foreach (var contract in contractSet.Contracts)
         {
@@ -336,6 +343,16 @@ public class DataContractGenerator : IIncrementalGenerator
                 }
 
                 writer.AppendLine();
+                foreach (var contract in contractSet.Contracts)
+                {
+                    if (contract is ClassDataContractSpec adapter &&
+                        adapter.IsValueType &&
+                        adapter.UnderlyingType.FullyQualifiedName != adapter.OriginalUnderlyingType.FullyQualifiedName)
+                    {
+                        writer.AppendLine($"{dictionary}[typeof(global::System.Nullable<{adapter.OriginalUnderlyingType.FullyQualifiedName}>)] = {adapter.GeneratedName};");
+                    }
+                }
+
                 writer.AppendLine($"TypeDataContracts = global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary({dictionary});");
 
                 writer.AppendLine();

@@ -8,10 +8,15 @@ namespace Marius.DataContracts.Runtime;
 
 public class XmlObjectSerializerWriteContextComplex : XmlObjectSerializerWriteContext
 {
+    private readonly SerializationSurrogate? _surrogate;
+
+    internal bool HasSurrogate => _surrogate != null;
+
     public XmlObjectSerializerWriteContextComplex(DataContractSerializer serializer, DataContract rootTypeDataContract)
         : base(serializer, rootTypeDataContract)
     {
         _preserveObjectReferences = serializer.PreserveObjectReferences;
+        _surrogate = serializer.CreateSurrogate();
     }
 
     public XmlObjectSerializerWriteContextComplex(XmlObjectSerializer serializer, int maxItemsInObjectGraph, StreamingContext streamingContext, bool ignoreExtensionDataObject)
@@ -22,6 +27,63 @@ public class XmlObjectSerializerWriteContextComplex : XmlObjectSerializerWriteCo
     public override bool WriteClrTypeInfo(XmlWriterDelegator xmlWriter, DataContract dataContract)
     {
         return false;
+    }
+
+    public override Type GetSurrogatedType(Type type)
+    {
+        if (_surrogate == null)
+            return base.GetSurrogatedType(type);
+
+        type = Nullable.GetUnderlyingType(type) ?? type;
+        var replacement = _surrogate.GetSurrogatedType(type);
+        if (IsGetOnlyCollection && replacement != type)
+            throw new InvalidDataContractException(SR.Format(SR.SurrogatesWithGetOnlyCollectionsNotSupportedSerDeser, DataContract.GetClrTypeFullName(type)));
+
+        return replacement;
+    }
+
+    public override void CheckIfTypeSerializable(Type memberType, bool isMemberTypeSerializable)
+    {
+        if (_surrogate == null)
+        {
+            base.CheckIfTypeSerializable(memberType, isMemberTypeSerializable);
+            return;
+        }
+
+        while (memberType.IsArray)
+            memberType = memberType.GetElementType()!;
+        _surrogate.GetSurrogatedType(memberType);
+    }
+
+    public override void InternalSerialize(XmlWriterDelegator writer, object obj, bool isDeclaredType, bool writeXsiType, RuntimeTypeHandle declaredTypeHandle)
+    {
+        if (_surrogate == null)
+        {
+            base.InternalSerialize(writer, obj, isDeclaredType, writeXsiType, declaredTypeHandle);
+            return;
+        }
+
+        var actualType = isDeclaredType ? Type.GetTypeFromHandle(declaredTypeHandle)! : obj.GetType();
+        var declaredType = GetSurrogatedType(Type.GetTypeFromHandle(declaredTypeHandle)!);
+        var replacement = _surrogate.GetObjectToSerialize(obj, declaredType, ref actualType);
+        var oldId = 0;
+        if (!ReferenceEquals(obj, replacement))
+            oldId = SerializedObjects.ReassignId(0, obj, replacement!);
+
+        try
+        {
+            if (writeXsiType)
+                SerializeWithXsiType(writer, replacement!, actualType.TypeHandle, actualType, typeof(object).TypeHandle, typeof(object));
+            else if (declaredType == actualType)
+                SerializeWithoutXsiType(_surrogate.GetGeneratedContract(actualType), writer, replacement!, declaredType.TypeHandle);
+            else
+                SerializeWithXsiType(writer, replacement!, actualType.TypeHandle, actualType, declaredType.TypeHandle, declaredType);
+        }
+        finally
+        {
+            if (!ReferenceEquals(obj, replacement))
+                SerializedObjects.ReassignId(oldId, replacement!, obj);
+        }
     }
 
     public override bool WriteClrTypeInfo(XmlWriterDelegator xmlWriter, Type dataContractType, string? clrTypeName, string? clrAssemblyName)

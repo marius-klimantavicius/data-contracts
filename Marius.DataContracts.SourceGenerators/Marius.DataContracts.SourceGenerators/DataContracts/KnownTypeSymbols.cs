@@ -20,7 +20,7 @@ internal sealed class KnownTypeSymbols
     public const string ExtensionDataSetExplicitMethod = "System.Runtime.Serialization.IExtensibleDataObject.set_ExtensionData";
     public const string ExtensionDataObjectPropertyName = "ExtensionData";
     public const string ExtensionDataObjectFieldName = "extensionDataField";
-    
+
     public Compilation Compilation { get; }
 
     public INamedTypeSymbol ObjectType => _ObjectType ??= Compilation.GetSpecialType(SpecialType.System_Object);
@@ -103,6 +103,12 @@ internal sealed class KnownTypeSymbols
 
     public INamedTypeSymbol? TimeSpanType => GetOrResolveType(typeof(TimeSpan), ref _TimeSpanType);
     private Option<INamedTypeSymbol?> _TimeSpanType;
+
+    public INamedTypeSymbol? DateTimeOffsetType => GetOrResolveType(typeof(DateTimeOffset), ref _DateTimeOffsetType);
+    private Option<INamedTypeSymbol?> _DateTimeOffsetType;
+
+    public INamedTypeSymbol? MemoryStreamType => GetOrResolveType(typeof(MemoryStream), ref _MemoryStreamType);
+    private Option<INamedTypeSymbol?> _MemoryStreamType;
 
     public INamedTypeSymbol? GuidType => GetOrResolveType(typeof(Guid), ref _GuidType);
     private Option<INamedTypeSymbol?> _GuidType;
@@ -233,7 +239,7 @@ internal sealed class KnownTypeSymbols
     ];
 
     private INamedTypeSymbol?[]? _KnownCollectionInterfaces;
-    
+
     public static HasAttributeCheck HasOnSerializingAttribute = new HasAttributeCheck
     {
         FullAttributeName = OnSerializingAttributeFullName,

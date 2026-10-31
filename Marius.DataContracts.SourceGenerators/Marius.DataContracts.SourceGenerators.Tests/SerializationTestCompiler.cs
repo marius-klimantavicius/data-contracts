@@ -57,7 +57,7 @@ public class SerializationTestCompiler
 
         public static class SerializationTestRunner
         {
-            public static SerializationTestResultData RunTest<T>(T original, Type contractType) where T : class
+            public static SerializationTestResultData RunTest<T>(T original, Type contractType, System.Runtime.Serialization.DataContractSerializerSettings? settings = null) where T : class
             {
                 string netXml = null;
                 string customXml = null;
@@ -65,9 +65,9 @@ public class SerializationTestCompiler
                 try
                 {
                     // Create serializers
-                    var netSerializer = new System.Runtime.Serialization.DataContractSerializer(contractType);
+                    var netSerializer = new System.Runtime.Serialization.DataContractSerializer(contractType, settings);
                     var customProvider = new DataContractProvider(DataContractContext.DataContracts, DataContractContext.TypeDataContracts);
-                    var customSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(customProvider, contractType);
+                    var customSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(customProvider, contractType, settings);
 
                     // Serialize with .NET serializer
                     using (var netStream = new MemoryStream())
@@ -88,8 +88,8 @@ public class SerializationTestCompiler
                     }
         
                     // Compare XMLs semantically
-                    var netElement = XElement.Parse(netXml);
-                    var customElement = XElement.Parse(customXml);
+                    var netElement = XElement.Parse(netXml, LoadOptions.PreserveWhitespace);
+                    var customElement = XElement.Parse(customXml, LoadOptions.PreserveWhitespace);
                     xmlEquivalent = AreXmlSemanticallyEquivalent(netElement, customElement);
         
                     // Deserialize with custom serializer from .NET XML
@@ -106,14 +106,25 @@ public class SerializationTestCompiler
                         netDeserialized = (T?)netSerializer.ReadObject(stream);
                     }
         
-                    // Compare deserialized objects
-                    var customEqualsOriginal = ObjectsAreEqual(original, customDeserialized);
-                    var netEqualsOriginal = ObjectsAreEqual(original, netDeserialized);
-                    var deserializedEqual = customEqualsOriginal && netEqualsOriginal;
-        
-                    var details = $"Custom deserializer equals original: {customEqualsOriginal}\n" +
-                                  $".NET deserializer equals original: {netEqualsOriginal}";
-        
+                    // Use the framework deserialization of each XML as the oracle. An input's
+                    // noncontract state and concrete collection types need not survive serialization.
+                    T? netFromNet;
+                    T? customFromCustom;
+                    using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(netXml)))
+                        netFromNet = (T?)netSerializer.ReadObject(stream);
+
+                    using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(customXml)))
+                        customFromCustom = (T?)customSerializer.ReadObject(stream);
+
+                    var preserve = settings?.PreserveObjectReferences == true;
+                    var sameNetXml = new GraphComparison(preserve).Compare(netFromNet, customDeserialized);
+                    var sameCustomXml = new GraphComparison(preserve).Compare(netDeserialized, customFromCustom);
+                    var crossXml = new GraphComparison(preserve).Compare(netFromNet, netDeserialized);
+                    var deserializedEqual = sameNetXml && sameCustomXml && crossXml;
+                    var details = $"Same .NET XML state: {sameNetXml}\n" +
+                                  $"Same custom XML state: {sameCustomXml}\n" +
+                                  $"Framework state across XMLs: {crossXml}";
+
                     return new SerializationTestResultData
                     {
                         Success = true,
@@ -137,157 +148,201 @@ public class SerializationTestCompiler
                 }
             }
         
-            private static bool AreXmlSemanticallyEquivalent(XElement elem1, XElement elem2)
+            private static bool AreXmlSemanticallyEquivalent(XElement left, XElement right)
             {
-                // Compare element names (includes namespace)
-                if (elem1.Name != elem2.Name)
+                if (left.Name != right.Name)
                     return false;
-        
-                // Compare attributes (ignoring namespace declarations and order)
-                var attrs1 = elem1.Attributes()
-                    .Where(a => !a.IsNamespaceDeclaration)
-                    .OrderBy(a => a.Name.NamespaceName)
-                    .ThenBy(a => a.Name.LocalName)
-                    .ToList();
-                var attrs2 = elem2.Attributes()
-                    .Where(a => !a.IsNamespaceDeclaration)
-                    .OrderBy(a => a.Name.NamespaceName)
-                    .ThenBy(a => a.Name.LocalName)
-                    .ToList();
-        
-                if (attrs1.Count != attrs2.Count)
+
+                var leftAttributes = left.Attributes().Where(a => !a.IsNamespaceDeclaration).ToList();
+                var rightAttributes = right.Attributes().Where(a => !a.IsNamespaceDeclaration).ToList();
+                if (leftAttributes.Count != rightAttributes.Count)
                     return false;
-        
-                for (int i = 0; i < attrs1.Count; i++)
+                
+                XName xsiType = "{http://www.w3.org/2001/XMLSchema-instance}type";
+                foreach (var attribute in leftAttributes)
                 {
-                    if (attrs1[i].Name != attrs2[i].Name || attrs1[i].Value != attrs2[i].Value)
+                    var other = right.Attribute(attribute.Name);
+                    if (other == null) return false;
+                    if (attribute.Name == xsiType)
+                    {
+                        if (ExpandedName(left, attribute.Value) != ExpandedName(right, other.Value))
+                            return false;
+                    }
+                    else
+                    {
+                        if (attribute.Value != other.Value)
+                            return false;
+                    }
+                }
+
+                // Preserve all text, including significant spaces and text between children.
+                // Adjacent CDATA/text nodes have the same XML character content.
+                var leftNodes = Content(left).ToList();
+                var rightNodes = Content(right).ToList();
+                if (leftNodes.Count != rightNodes.Count) return false;
+                for (int i = 0; i < leftNodes.Count; i++)
+                {
+                    if (leftNodes[i] is XElement le && rightNodes[i] is XElement re)
+                    {
+                        if (!AreXmlSemanticallyEquivalent(le, re))
+                            return false;
+                    }
+                    else if (leftNodes[i] is string lt && rightNodes[i] is string rt)
+                    {
+                        if (lt != rt)
+                            return false;
+                    }
+                    else
+                    {
                         return false;
+                    }
                 }
-        
-                // Compare child elements
-                var elements1 = elem1.Elements().ToList();
-                var elements2 = elem2.Elements().ToList();
-        
-                if (elements1.Count == 0 && elements2.Count == 0)
-                {
-                    // Compare text content
-                    return elem1.Value.Trim() == elem2.Value.Trim();
-                }
-        
-                if (elements1.Count != elements2.Count)
-                    return false;
-        
-                for (int i = 0; i < elements1.Count; i++)
-                {
-                    if (!AreXmlSemanticallyEquivalent(elements1[i], elements2[i]))
-                        return false;
-                }
-        
                 return true;
             }
-        
-            private static bool ObjectsAreEqual(object? obj1, object? obj2)
+
+            private static XName ExpandedName(XElement element, string value)
             {
-                if (obj1 == null && obj2 == null) return true;
-                if (obj1 == null || obj2 == null) return false;
-        
-                var type = obj1.GetType();
-                if (type != obj2.GetType()) return false;
-        
-                // For primitive types and strings
-                if (type.IsPrimitive || type == typeof(string) || type == typeof(decimal) ||
-                    type == typeof(DateTime) || type == typeof(Guid) || type == typeof(TimeSpan))
+                value = value.Trim();
+                var parts = value.Split(':');
+                if (parts.Length == 1) return element.GetDefaultNamespace() + parts[0];
+                if (parts.Length != 2 || element.GetNamespaceOfPrefix(parts[0]) is not XNamespace ns)
+                    throw new XmlException("Unbound or invalid QName: " + value);
+                return ns + parts[1];
+            }
+
+            private static IEnumerable<object> Content(XElement element)
+            {
+                string text = "";
+                foreach (var node in element.Nodes())
                 {
-                    return obj1.Equals(obj2);
-                }
-        
-                // For byte arrays
-                if (type == typeof(byte[]))
-                {
-                    var arr1 = (byte[])obj1;
-                    var arr2 = (byte[])obj2;
-                    return arr1.SequenceEqual(arr2);
-                }
-        
-                // For enums
-                if (type.IsEnum)
-                {
-                    return obj1.Equals(obj2);
-                }
-        
-                // Check for IEquatable<T>
-                var equatableInterface = type.GetInterfaces()
-                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IEquatable<>));
-                if (equatableInterface != null)
-                {
-                    var equalsMethod = equatableInterface.GetMethod("Equals");
-                    if (equalsMethod != null)
+                    if (node is XText t) text += t.Value;
+                    else if (node is XElement child)
                     {
-                        var result = equalsMethod.Invoke(obj1, new[] { obj2 });
-                        if (result is bool boolResult)
-                            return boolResult;
+                        if (text.Length != 0)
+                        {
+                            yield return text;
+                            text = "";
+                        }
+
+                        yield return child;
                     }
                 }
-        
-                // Check for IComparable<T>
-                var comparableInterface = type.GetInterfaces()
-                    .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IComparable<>));
-                if (comparableInterface != null)
+
+                if (text.Length != 0)
+                    yield return text;
+            }
+
+            private static bool ObjectsAreEqual(object? left, object? right) => new GraphComparison(true).Compare(left, right);
+
+            private sealed class GraphComparison
+            {
+                private readonly bool preserveReferences;
+                private readonly Dictionary<object, object> leftToRight = new(ReferenceEqualityComparer.Instance);
+                private readonly Dictionary<object, object> rightToLeft = new(ReferenceEqualityComparer.Instance);
+                private readonly Dictionary<object, HashSet<object>> visited = new(ReferenceEqualityComparer.Instance);
+                public GraphComparison(bool preserveReferences) { this.preserveReferences = preserveReferences; }
+
+                public bool Compare(object? left, object? right)
                 {
-                    var compareMethod = comparableInterface.GetMethod("CompareTo");
-                    if (compareMethod != null)
-                    {
-                        var result = compareMethod.Invoke(obj1, new[] { obj2 });
-                        if (result is int intResult)
-                            return intResult == 0;
-                    }
-                }
-        
-                // Check for non-generic IComparable
-                if (obj1 is IComparable comparable1)
-                {
-                    return comparable1.CompareTo(obj2) == 0;
-                }
-        
-                // For arrays
-                if (type.IsArray)
-                {
-                    var arr1 = (Array)obj1;
-                    var arr2 = (Array)obj2;
-                    if (arr1.Length != arr2.Length) return false;
-                    for (int i = 0; i < arr1.Length; i++)
-                    {
-                        if (!ObjectsAreEqual(arr1.GetValue(i), arr2.GetValue(i)))
-                            return false;
-                    }
-                    return true;
-                }
-        
-                // For collections (IEnumerable) - but not strings which are also IEnumerable
-                if (obj1 is IEnumerable enum1 && obj2 is IEnumerable enum2 && type != typeof(string))
-                {
-                    var list1 = enum1.Cast<object>().ToList();
-                    var list2 = enum2.Cast<object>().ToList();
-                    if (list1.Count != list2.Count) return false;
-                    for (int i = 0; i < list1.Count; i++)
-                    {
-                        if (!ObjectsAreEqual(list1[i], list2[i]))
-                            return false;
-                    }
-                    return true;
-                }
-        
-                // For complex types, compare all public properties
-                foreach (var prop in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-                {
-                    if (!prop.CanRead) continue;
-                    var val1 = prop.GetValue(obj1);
-                    var val2 = prop.GetValue(obj2);
-                    if (!ObjectsAreEqual(val1, val2))
+                    if (left is null || right is null)
+                        return left is null && right is null;
+
+                    var type = left.GetType();
+                    if (type != right.GetType())
                         return false;
+                    
+                    var contract = (System.Runtime.Serialization.DataContractAttribute?)Attribute.GetCustomAttribute(type, typeof(System.Runtime.Serialization.DataContractAttribute), false);
+                    if (!type.IsValueType)
+                    {
+                        if (preserveReferences || contract?.IsReference == true)
+                        {
+                            if (leftToRight.TryGetValue(left, out var mapped)) return ReferenceEquals(mapped, right);
+                            if (rightToLeft.ContainsKey(right)) return false;
+                            leftToRight.Add(left, right);
+                            rightToLeft.Add(right, left);
+                        }
+                        
+                        if (!visited.TryGetValue(left, out var matches))
+                            visited.Add(left, matches = new HashSet<object>(ReferenceEqualityComparer.Instance));
+                        
+                        if (!matches.Add(right))
+                            return true;
+                    }
+                    
+                    if (left is DateTime leftDate && right is DateTime rightDate)
+                        return leftDate.Ticks == rightDate.Ticks && leftDate.Kind == rightDate.Kind;
+
+                    if (type.IsPrimitive || type.IsEnum || left is string || left is decimal ||
+                        left is DateTimeOffset || left is Guid || left is TimeSpan ||
+                        left is Uri || left is XmlQualifiedName)
+                    {
+                        return left.Equals(right);
+                    }
+
+                    if (left is Array la && right is Array ra)
+                    {
+                        if (la.Rank != ra.Rank) return false;
+                        for (int i = 0; i < la.Rank; i++)
+                        {
+                            if (la.GetLength(i) != ra.GetLength(i) || la.GetLowerBound(i) != ra.GetLowerBound(i))
+                                return false;
+                        }
+                    }
+
+                    if (left is IEnumerable first && right is IEnumerable second)
+                    {
+                        var a = first.GetEnumerator();
+                        var b = second.GetEnumerator();
+                        try
+                        {
+                            while (a.MoveNext())
+                                if (!b.MoveNext() || !Compare(a.Current, b.Current)) return false;
+
+                            return !b.MoveNext();
+                        }
+                        finally
+                        {
+                            (a as IDisposable)?.Dispose(); (b as IDisposable)?.Dispose();
+                        }
+                    }
+
+                    // Walk declarations individually so hidden base members and private
+                    // DataMembers are examined. Never delegate state checks to user equality.
+                    for (var declaration = type; declaration != null && declaration != typeof(object); declaration = declaration.BaseType)
+                    {
+                        bool attributed = Attribute.IsDefined(declaration, typeof(System.Runtime.Serialization.DataContractAttribute), false);
+                        bool serializable = Attribute.IsDefined(declaration, typeof(SerializableAttribute), false);
+                        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+                        
+                        foreach (var field in declaration.GetFields(flags))
+                        {
+                            bool included = attributed ? Attribute.IsDefined(field, typeof(System.Runtime.Serialization.DataMemberAttribute)) :
+                                serializable ? !Attribute.IsDefined(field, typeof(NonSerializedAttribute)) :
+                                field.IsPublic && !Attribute.IsDefined(field, typeof(System.Runtime.Serialization.IgnoreDataMemberAttribute));
+                            
+                            if (included && !Compare(field.GetValue(left), field.GetValue(right)))
+                                return false;
+                        }
+
+                        if (serializable && !attributed)
+                            continue;
+
+                        foreach (var property in declaration.GetProperties(flags))
+                        {
+                            if (property.GetIndexParameters().Length != 0 || property.GetMethod == null)
+                                continue;
+
+                            bool included = attributed ? Attribute.IsDefined(property, typeof(System.Runtime.Serialization.DataMemberAttribute)) :
+                                property.GetMethod.IsPublic && !Attribute.IsDefined(property, typeof(System.Runtime.Serialization.IgnoreDataMemberAttribute)) &&
+                                (property.SetMethod?.IsPublic == true || typeof(IEnumerable).IsAssignableFrom(property.PropertyType));
+
+                            if (included && !Compare(property.GetValue(left), property.GetValue(right)))
+                                return false;
+                        }
+                    }
+
+                    return true;
                 }
-        
-                return true;
             }
         }
         
@@ -305,7 +360,8 @@ public class SerializationTestCompiler
 
     private string BuildDataContractCode(string dataContractCode)
     {
-        return $$"""
+        return 
+            $$"""
             #nullable enable
             using System;
             using System.IO;
@@ -322,7 +378,8 @@ public class SerializationTestCompiler
 
     private string BuildTestCode(string testCode)
     {
-        return $$"""
+        return 
+            $$"""
             #nullable enable
             using System;
             using System.IO;
@@ -354,7 +411,11 @@ public class SerializationTestCompiler
         var compilation = CSharpCompilation.Create(
             $"TestAssembly_{Guid.NewGuid():N}",
             new[] { infrastructureTree, dataContractTree, testTree },
+#if NET9_0
+            Net90.References.All
+#else
             Net100.References.All
+#endif
                 .Add(MetadataReference.CreateFromFile(typeof(Runtime.DataContractSerializer).Assembly.Location))
             ,
             new CSharpCompilationOptions(

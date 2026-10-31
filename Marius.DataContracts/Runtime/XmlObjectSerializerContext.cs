@@ -4,7 +4,6 @@
 using System.Collections.Frozen;
 using System.Runtime.Serialization;
 using System.Xml;
-
 using DataContractDictionary = System.Collections.Frozen.FrozenDictionary<System.Xml.XmlQualifiedName, Marius.DataContracts.Runtime.DataContract>;
 
 namespace Marius.DataContracts.Runtime;
@@ -21,7 +20,7 @@ public class XmlObjectSerializerContext
     private readonly int _maxItemsInObjectGraph;
     private readonly StreamingContext _streamingContext;
 
-    protected ScopedKnownTypes ScopedKnownTypes => _scopedKnownTypes;
+    protected ref ScopedKnownTypes ScopedKnownTypes => ref _scopedKnownTypes;
     protected IDataContractProvider DataContractProvider => _serializer.DataContractProvider;
     protected DataContract? rootTypeDataContract => _rootTypeDataContract;
 
@@ -129,15 +128,29 @@ public class XmlObjectSerializerContext
             if (knownType == null)
                 throw new ArgumentException(SR.Format(SR.NullKnownType, "knownTypes"));
 
-            // Check if this is correct, how to handle duplicates
             var typeContract = dataContractProvider.GetDataContract(knownType);
-            foreach (var item in typeContract.KnownDataContracts) 
-                dataContracts.TryAdd(item.Key, item.Value);
+            AddKnownContract(dataContracts, typeContract);
+
+            foreach (var item in typeContract.KnownDataContracts)
+                AddKnownContract(dataContracts, item.Value);
         }
 
         return dataContracts.ToFrozenDictionary();
+
+        static void AddKnownContract(Dictionary<XmlQualifiedName, DataContract> dataContracts, DataContract contract)
+        {
+            if (dataContracts.TryGetValue(contract.XmlName, out var existing))
+            {
+                if (existing.UnderlyingType != contract.UnderlyingType)
+                    throw new InvalidOperationException(SR.Format(SR.DupContractInKnownTypes, contract.UnderlyingType, existing.UnderlyingType, contract.XmlName.Namespace, contract.XmlName.Name));
+            }
+            else
+            {
+                dataContracts.Add(contract.XmlName, contract);
+            }
+        }
     }
-    
+
     public bool IsKnownType(DataContract dataContract, DataContractDictionary? knownDataContracts, Type? declaredType)
     {
         var knownTypesAddedInCurrentScope = false;
@@ -170,7 +183,7 @@ public class XmlObjectSerializerContext
     }
 
     private DataContract? ResolveDataContractFromKnownTypes(XmlQualifiedName typeName) =>
-        DataContractProvider.GetPrimitiveDataContract(typeName.Name, typeName.Namespace) ??
+        DataContractProvider.GetBuiltInDataContract(typeName.Name, typeName.Namespace) ??
         _scopedKnownTypes.GetDataContract(typeName) ??
         GetDataContractFromSerializerKnownTypes(typeName);
 

@@ -553,6 +553,18 @@ internal partial class ClassDataContract
             }
         }
 
+        private static bool IsVirtualCallback(IMethodSymbol method)
+        {
+            // Interface implementations are virtual/final in CLR metadata even
+            // when the C# method has no virtual modifier.
+            return method.IsVirtual ||
+                method.IsOverride ||
+                method.IsAbstract ||
+                method.ExplicitInterfaceImplementations.Length != 0 ||
+                method.ContainingType.AllInterfaces.Any(
+                    @interface => @interface.GetMembers().OfType<IMethodSymbol>().Any(member => SymbolEqualityComparer.Default.Equals(method.ContainingType.FindImplementationForInterfaceMember(member), method)));
+        }
+
         private bool IsValidCallback(IMethodSymbol method, ImmutableArray<IParameterSymbol> parameters, in KnownTypeSymbols.HasAttributeCheck hasAttributeCheck, IMethodSymbol? currentCallback, ref string? prevAttributeType)
         {
             if (hasAttributeCheck.HasAttribute(method))
@@ -568,7 +580,7 @@ internal partial class ClassDataContract
                 {
                     DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.DuplicateAttribute, prevAttributeType, hasAttributeCheck.FullAttributeName, DataContractContext.GetClrTypeFullName(methodContainingType), method));
                 }
-                else if (method.IsVirtual)
+                else if (IsVirtualCallback(method))
                 {
                     DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbacksCannotBeVirtualMethods, method, DataContractContext.GetClrTypeFullName(methodContainingType), hasAttributeCheck.FullAttributeName));
                 }
@@ -576,7 +588,7 @@ internal partial class ClassDataContract
                 {
                     if (method.ReturnType.SpecialType != SpecialType.System_Void)
                         DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackMustReturnVoid, DataContractContext.GetClrTypeFullName(methodContainingType), method));
-                    if (parameters == null || parameters.Length != 1 || !Context.KnownSymbols.IsStreamingContext(parameters[0].Type))
+                    if (parameters == null || parameters.Length != 1 || parameters[0].RefKind != RefKind.None || !Context.KnownSymbols.IsStreamingContext(parameters[0].Type))
                         DataContractContext.ThrowInvalidDataContractException(SR.Format(SR.CallbackParameterInvalid, DataContractContext.GetClrTypeFullName(methodContainingType), method, "System.Runtime.Serialization.StreamingContext"));
 
                     prevAttributeType = hasAttributeCheck.FullAttributeName;

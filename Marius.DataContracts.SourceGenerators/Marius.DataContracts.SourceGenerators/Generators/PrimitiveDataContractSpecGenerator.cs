@@ -16,7 +16,7 @@ internal class PrimitiveDataContractSpecGenerator : SpecContractGenerator
 
     public override void DeclareDataContract()
     {
-        AppendLine($"public static global::Marius.DataContracts.Runtime.PrimitiveDataContract<{PrimitiveContract.UnderlyingType.FullyQualifiedName}> {PrimitiveContract.GeneratedName};");
+        AppendLine($"{ContractAccessibility(PrimitiveContract.UnderlyingType)} static global::Marius.DataContracts.Runtime.PrimitiveDataContract<{PrimitiveContract.UnderlyingType.FullyQualifiedName}> {PrimitiveContract.GeneratedName};");
     }
 
     public override (string localName, string? underlyingTypeOverride) GenerateDataContract(SourceProductionContext context, string xmlDictionary)

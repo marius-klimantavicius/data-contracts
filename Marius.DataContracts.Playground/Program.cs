@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.Json;
@@ -12,7 +12,9 @@ namespace Marius.DataContracts.Playground;
 
 class Program
 {
-    static async Task Main(string[] args)
+    static Task<int> Main(string[] args) => FixedCasesShowcase.RunAsync(args);
+
+    internal static async Task RunOriginalDemoAsync()
     {
         var value = new SimpleContract
         {
@@ -49,13 +51,13 @@ class Program
         var netSerializer = new DataContractSerializer(typeof(SimpleContract), new Type[] { typeof(uint[]) });
 
         // Serialize with System.Runtime.Serialization.DataContractSerializer
-        var netStream = new MemoryStream();
+        using var netStream = new MemoryStream();
         netSerializer.WriteObject(netStream, value);
         netStream.Position = 0;
         var netXml = await new StreamReader(netStream).ReadToEndAsync();
 
         // Serialize with Marius.DataContracts.Runtime.DataContractSerializer
-        var localStream = new MemoryStream();
+        using var localStream = new MemoryStream();
         localSerializer.WriteObject(localStream, value);
         localStream.Position = 0;
         var localXml = await new StreamReader(localStream).ReadToEndAsync();
@@ -80,6 +82,7 @@ class Program
         var areEquivalent = AreXmlSemanticallyEquivalent(netXElement, localXElement);
         Console.WriteLine($"=== Semantic Equivalence Check ===");
         Console.WriteLine($"XMLs are semantically equivalent: {areEquivalent}");
+        ShowcaseChecks.Check(areEquivalent, "The original demo's XML differs from .NET.");
 
         // Deserialize back to verify round-trip
         netStream.Position = 0;
@@ -105,82 +108,7 @@ class Program
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Checks if two XElements are semantically equivalent.
-    /// This compares element names (including namespace), attributes, and content,
-    /// ignoring differences in namespace prefix names and attribute order.
-    /// </summary>
-    static bool AreXmlSemanticallyEquivalent(XElement elem1, XElement elem2)
-    {
-        // Compare element names (includes namespace)
-        if (elem1.Name != elem2.Name)
-        {
-            Console.WriteLine($"Element name mismatch: {elem1.Name} vs {elem2.Name}");
-            return false;
-        }
-
-        // Compare attributes (ignoring namespace declaration attributes and order)
-        var attrs1 = elem1.Attributes()
-            .Where(a => !a.IsNamespaceDeclaration)
-            .OrderBy(a => a.Name.NamespaceName)
-            .ThenBy(a => a.Name.LocalName)
-            .ToList();
-        var attrs2 = elem2.Attributes()
-            .Where(a => !a.IsNamespaceDeclaration)
-            .OrderBy(a => a.Name.NamespaceName)
-            .ThenBy(a => a.Name.LocalName)
-            .ToList();
-
-        if (attrs1.Count != attrs2.Count)
-        {
-            Console.WriteLine($"Attribute count mismatch in {elem1.Name}: {attrs1.Count} vs {attrs2.Count}");
-            return false;
-        }
-
-        for (var i = 0; i < attrs1.Count; i++)
-        {
-            if (attrs1[i].Name != attrs2[i].Name || attrs1[i].Value != attrs2[i].Value)
-            {
-                Console.WriteLine($"Attribute mismatch: {attrs1[i].Name}='{attrs1[i].Value}' vs {attrs2[i].Name}='{attrs2[i].Value}'");
-                return false;
-            }
-        }
-
-        // Compare text content (trimmed) if there are no child elements
-        var elements1 = elem1.Elements().ToList();
-        var elements2 = elem2.Elements().ToList();
-
-        if (elements1.Count == 0 && elements2.Count == 0)
-        {
-            // Compare text content
-            var text1 = elem1.Value.Trim();
-            var text2 = elem2.Value.Trim();
-            if (text1 != text2)
-            {
-                Console.WriteLine($"Text content mismatch in {elem1.Name}: '{text1}' vs '{text2}'");
-                return false;
-            }
-
-            return true;
-        }
-
-        // Compare child elements
-        if (elements1.Count != elements2.Count)
-        {
-            Console.WriteLine($"Child element count mismatch in {elem1.Name}: {elements1.Count} vs {elements2.Count}");
-            return false;
-        }
-
-        for (var i = 0; i < elements1.Count; i++)
-        {
-            if (!AreXmlSemanticallyEquivalent(elements1[i], elements2[i]))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+    static bool AreXmlSemanticallyEquivalent(XElement left, XElement right) => XmlEquivalence.AreEqual(left, right);
 }
 
 [JsonSerializable(typeof(SimpleContract))]

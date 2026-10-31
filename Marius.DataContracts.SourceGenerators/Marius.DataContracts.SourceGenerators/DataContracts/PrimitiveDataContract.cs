@@ -18,6 +18,8 @@ internal abstract class PrimitiveDataContract : DataContract
 
     private sealed class PrimitiveDataContractModel : DataContractModel
     {
+        public override string TopLevelElementNamespace => DataContractContext.SerializationNamespace;
+
         public PrimitiveDataContractModel(DataContractContext context, ITypeSymbol type, string name, string ns)
             : base(context, type)
         {
@@ -71,7 +73,7 @@ internal class DateTimeDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteDateTime";
     public override string ReadMethodName => "ReadElementContentAsDateTime";
-    
+
     public DateTimeDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.DateTimeType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -84,7 +86,7 @@ internal class DecimalDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteDecimal";
     public override string ReadMethodName => "ReadElementContentAsDecimal";
-    
+
     public DecimalDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.DecimalType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -97,7 +99,7 @@ internal class DoubleDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteDouble";
     public override string ReadMethodName => "ReadElementContentAsDouble";
-    
+
     public DoubleDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.DoubleType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -162,7 +164,7 @@ internal class FloatDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteFloat";
     public override string ReadMethodName => "ReadElementContentAsFloat";
-    
+
     public FloatDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.SingleType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -175,7 +177,7 @@ internal class StringDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteString";
     public override string ReadMethodName => "ReadElementContentAsString";
-    
+
     public StringDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.StringType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -229,7 +231,7 @@ internal class ObjectDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteAnyType";
     public override string ReadMethodName => "ReadElementContentAsAnyType";
-    
+
     public ObjectDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.ObjectType, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -253,7 +255,7 @@ internal class ByteArrayDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteBase64";
     public override string ReadMethodName => "ReadElementContentAsBase64";
-    
+
     public ByteArrayDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.ByteArrayType!, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -266,7 +268,7 @@ internal class UriDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteUri";
     public override string ReadMethodName => "ReadElementContentAsUri";
-    
+
     public UriDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.UriType!, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -279,7 +281,7 @@ internal class QNameDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteQName";
     public override string ReadMethodName => "ReadElementContentAsQName";
-    
+
     public QNameDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.XmlQualifiedNameType!, LocalName, DataContractContext.SchemaNamespace)
     {
@@ -292,7 +294,7 @@ internal class TimeSpanDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteTimeSpan";
     public override string ReadMethodName => "ReadElementContentAsTimeSpan";
-    
+
     public TimeSpanDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.TimeSpanType!, LocalName, DataContractContext.SerializationNamespace)
     {
@@ -305,7 +307,7 @@ internal class GuidDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteGuid";
     public override string ReadMethodName => "ReadElementContentAsGuid";
-    
+
     public GuidDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.GuidType!, LocalName, DataContractContext.SerializationNamespace)
     {
@@ -318,7 +320,7 @@ internal class DateOnlyDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteDateOnly";
     public override string ReadMethodName => "ReadElementContentAsDateOnly";
-    
+
     public DateOnlyDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.DateOnlyType!, LocalName, DataContractContext.SerializationNamespace)
     {
@@ -331,7 +333,7 @@ internal class TimeOnlyDataContract : PrimitiveDataContract
 
     public override string WriteMethodName => "WriteTimeOnly";
     public override string ReadMethodName => "ReadElementContentAsTimeOnly";
-    
+
     public TimeOnlyDataContract(DataContractContext context)
         : base(context, context.KnownSymbols.TimeOnlyType!, LocalName, DataContractContext.SerializationNamespace)
     {

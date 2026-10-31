@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.Serialization;
+using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -20,6 +21,7 @@ internal sealed class DataContractParser
     private readonly List<PrivateAccessorSpec> _accessors;
     private readonly List<DiagnosticInfo> _diagnostics;
     private int _accessorIndex;
+    private readonly Dictionary<ITypeSymbol, string> _generatedNames = new Dictionary<ITypeSymbol, string>(SymbolEqualityComparer.Default);
 
     /// <summary>
     /// Gets the location of the context class (first data contract type) for fallback location.
@@ -65,6 +67,8 @@ internal sealed class DataContractParser
     /// </summary>
     public DataContractSetSpec Parse()
     {
+        AssignGeneratedNames();
+
         // Build mapping of DataContract to index
         for (var i = 0; i < _context.DataContracts.Length; i++)
         {
@@ -135,6 +139,26 @@ internal sealed class DataContractParser
         _accessorCache[symbol] = spec;
         _accessors.Add(spec);
         return spec.Name;
+    }
+
+    private string? CreateCallbackAccessor(IMethodSymbol? callback)
+    {
+        if (callback == null)
+            return null;
+
+        if (callback.IsGenericMethod)
+        {
+            ReportDiagnostic(
+                DiagnosticDescriptors.InvalidCallback,
+                callback,
+                callback.Name,
+                DataContractContext.GetClrTypeFullName(callback.ContainingType),
+                "Generic callback methods are unsupported. Declare a non-generic callback method instead.");
+
+            return null;
+        }
+
+        return GetOrCreateAccessor(callback);
     }
 
     private string GetOrCreateSerializableConstructorAccessor(INamedTypeSymbol type)
@@ -416,22 +440,9 @@ internal sealed class DataContractParser
         if (contract.HasExtensionData)
             ReportDiagnostic(DiagnosticDescriptors.ExtensionDataNotSupported, type, DataContractContext.GetClrTypeFullName(type));
 
-        // Report warnings for serialization callbacks (not yet implemented)
-        if (contract.OnDeserializing != null)
-            ReportDiagnostic(DiagnosticDescriptors.OnDeserializingCallbackNotImplemented, contract.OnDeserializing, DataContractContext.GetClrTypeFullName(type));
-
-        if (contract.OnDeserialized != null)
-            ReportDiagnostic(DiagnosticDescriptors.OnDeserializedCallbackNotImplemented, contract.OnDeserialized, DataContractContext.GetClrTypeFullName(type));
-
-        if (contract.OnSerializing != null)
-            ReportDiagnostic(DiagnosticDescriptors.OnSerializingCallbackNotImplemented, contract.OnSerializing, DataContractContext.GetClrTypeFullName(type));
-
-        if (contract.OnSerialized != null)
-            ReportDiagnostic(DiagnosticDescriptors.OnSerializedCallbackNotImplemented, contract.OnSerialized, DataContractContext.GetClrTypeFullName(type));
-
         // Check for factory method and deserialization callback
         var hasFactoryMethod = type.AllInterfaces.Any(s => SymbolEqualityComparer.Default.Equals(_context.KnownSymbols.IObjectReferenceType, s));
-        var hasDeserializationCallback = type.Interfaces.Any(s => SymbolEqualityComparer.Default.Equals(_context.KnownSymbols.IDeserializationCallbackType, s));
+        var hasDeserializationCallback = type.AllInterfaces.Any(s => SymbolEqualityComparer.Default.Equals(_context.KnownSymbols.IDeserializationCallbackType, s));
 
         // Check for KnownType attributes with method names (not yet supported)
         CheckKnownTypeMethodAttributes(type);
@@ -452,7 +463,7 @@ internal sealed class DataContractParser
         return new ClassDataContractSpec
         {
             Id = id,
-            GeneratedName = typeInfoPropertyName,
+            GeneratedName = CSharpIdentifier.Escape(typeInfoPropertyName),
             TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSpec,
@@ -487,6 +498,10 @@ internal sealed class DataContractParser
             HasFactoryMethod = hasFactoryMethod,
             HasDeserializationCallback = hasDeserializationCallback,
             ISerializableConstructorAccessorName = iSerializableConstructorAccessorName,
+            OnSerializingAccessorName = CreateCallbackAccessor(contract.OnSerializing),
+            OnSerializedAccessorName = CreateCallbackAccessor(contract.OnSerialized),
+            OnDeserializingAccessorName = CreateCallbackAccessor(contract.OnDeserializing),
+            OnDeserializedAccessorName = CreateCallbackAccessor(contract.OnDeserialized),
             Kind = DataContractKindSpec.Class,
         };
     }
@@ -562,7 +577,7 @@ internal sealed class DataContractParser
         return new CollectionDataContractSpec
         {
             Id = id,
-            GeneratedName = typeInfoPropertyName,
+            GeneratedName = CSharpIdentifier.Escape(typeInfoPropertyName),
             TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
@@ -622,7 +637,7 @@ internal sealed class DataContractParser
         return new EnumDataContractSpec
         {
             Id = id,
-            GeneratedName = typeInfoPropertyName,
+            GeneratedName = CSharpIdentifier.Escape(typeInfoPropertyName),
             TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
@@ -667,7 +682,7 @@ internal sealed class DataContractParser
         return new PrimitiveDataContractSpec
         {
             Id = id,
-            GeneratedName = typeInfoPropertyName,
+            GeneratedName = CSharpIdentifier.Escape(typeInfoPropertyName),
             TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
@@ -787,7 +802,7 @@ internal sealed class DataContractParser
         return new XmlDataContractSpec
         {
             Id = id,
-            GeneratedName = typeInfoPropertyName,
+            GeneratedName = CSharpIdentifier.Escape(typeInfoPropertyName),
             TypeInfoPropertyName = typeInfoPropertyName,
             UnderlyingType = typeSpec,
             OriginalUnderlyingType = originalUnderlyingTypeSec,
@@ -965,7 +980,7 @@ internal sealed class DataContractParser
         }
 
         var isNullableValueType = false;
-        if (type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType) 
+        if (type is INamedTypeSymbol namedTypeSymbol && namedTypeSymbol.IsGenericType)
             isNullableValueType = _context.KnownSymbols.IsNullable(namedTypeSymbol.ConstructedFrom);
 
         var specialType = ConvertSpecialType(type.SpecialType);
@@ -974,7 +989,7 @@ internal sealed class DataContractParser
         TypeSpec? elementType = null;
         if (type is IArrayTypeSymbol arrayType)
             elementType = CreateTypeSpec(arrayType.ElementType);
-        else if (isNullableValueType && type is INamedTypeSymbol nullableType && nullableType.TypeArguments.Length > 0) 
+        else if (isNullableValueType && type is INamedTypeSymbol nullableType && nullableType.TypeArguments.Length > 0)
             elementType = CreateTypeSpec(nullableType.TypeArguments[0]);
 
         var constructedFromSpec = default(TypeSpec);
@@ -1005,7 +1020,7 @@ internal sealed class DataContractParser
         }
 
         var typeParameterSpec = default(TypeParameterSpec);
-        if (type is ITypeParameterSymbol typeParameter) 
+        if (type is ITypeParameterSymbol typeParameter)
             typeParameterSpec = CreateTypeParameterSpec(typeParameter, false);
 
         var isTypeSerializable = _context.IsTypeSerializable(type);
@@ -1015,6 +1030,7 @@ internal sealed class DataContractParser
             Name = name,
             Namespace = ns,
             IsValueType = isValueType,
+            IsPubliclyAccessible = IsPubliclyAccessible(type),
             IsNullableValueType = isNullableValueType,
             IsGenericType = isGenericType,
             IsOpenGenericType = isOpenGenericType,
@@ -1048,6 +1064,19 @@ internal sealed class DataContractParser
         }
 
         return false;
+    }
+
+    private static bool IsPubliclyAccessible(ITypeSymbol type)
+    {
+        if (type is IArrayTypeSymbol array)
+            return IsPubliclyAccessible(array.ElementType);
+
+        if (type is ITypeParameterSymbol)
+            return true;
+
+        return type.DeclaredAccessibility == Accessibility.Public &&
+            (type.ContainingType == null || IsPubliclyAccessible(type.ContainingType)) &&
+            (type is not INamedTypeSymbol named || named.TypeArguments.All(IsPubliclyAccessible));
     }
 
     private static SpecialTypeKind ConvertSpecialType(SpecialType specialType)
@@ -1089,29 +1118,80 @@ internal sealed class DataContractParser
         };
     }
 
-    private static string GetTypeInfoPropertyName(ITypeSymbol type)
+    private string GetTypeInfoPropertyName(ITypeSymbol type) => _generatedNames[type];
+
+    private void AssignGeneratedNames()
+    {
+        var types = _context.DataContracts.Where(contract => contract != null)
+            .Select(contract => contract is InterfaceDataContract interfaceContract ? interfaceContract.InterfaceType : contract!.UnderlyingType)
+            .Distinct<ITypeSymbol>(SymbolEqualityComparer.Default)
+            .OrderBy(type => type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat), StringComparer.Ordinal)
+            .ToArray();
+        var groups = types.GroupBy(GetLegacyTypeInfoPropertyName, StringComparer.Ordinal).ToArray();
+        var reserved = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "DataContractContext", "DataContracts", "TypeDataContracts", "DataContractProvider",
+            "GetSerializer", "ThrowValidationException", "ThrowUnexpectedStateException", "PrivateAccessor",
+        };
+        var contextNames = new HashSet<string>(reserved, StringComparer.Ordinal);
+        
+        // Reserve every legacy name before allocating suffixes, including names
+        // which happen to look like another type's qualified name.
+        foreach (var group in groups)
+            reserved.Add(group.Key);
+
+        foreach (var group in groups)
+        {
+            if (group.Count() == 1 && SyntaxFacts.IsValidIdentifier(group.Key) && !contextNames.Contains(group.Key))
+            {
+                _generatedNames.Add(group.Single(), group.Key);
+                continue;
+            }
+
+            foreach (var type in group)
+            {
+                var identity = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+                using var sha = SHA256.Create();
+
+                var suffix = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(identity)), 0, 8).Replace("-", "");
+                var prefix = Escape(group.Key);
+                if (prefix.Length == 0 || !SyntaxFacts.IsIdentifierStartCharacter(prefix[0]))
+                    prefix = "_" + prefix;
+                
+                var candidate = prefix + "__" + suffix;
+                var name = candidate;
+                var collision = 0;
+                while (!reserved.Add(name))
+                    name = candidate + "_" + (++collision).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+                _generatedNames.Add(type, name);
+            }
+        }
+    }
+
+    private static string GetLegacyTypeInfoPropertyName(ITypeSymbol type)
     {
         if (type is IArrayTypeSymbol arrayType)
         {
             var rank = arrayType.Rank;
             var suffix = rank == 1 ? "Array" : $"Array{rank}D"; // Array, Array2D, Array3D, ...
-            return GetTypeInfoPropertyName(arrayType.ElementType) + suffix;
+            return GetLegacyTypeInfoPropertyName(arrayType.ElementType) + suffix;
         }
- 
+
         if (type is not INamedTypeSymbol namedType || !namedType.IsGenericType)
             return type.Name;
- 
+
         var sb = new ValueStringBuilder();
         var name = namedType.Name;
- 
+
         sb.Append(name);
- 
+
         if (namedType.GetAllTypeArgumentsInScope() is List<ITypeSymbol> typeArgsInScope)
         {
-            foreach (var genericArg in typeArgsInScope) 
-                sb.Append(GetTypeInfoPropertyName(genericArg));
+            foreach (var genericArg in typeArgsInScope)
+                sb.Append(GetLegacyTypeInfoPropertyName(genericArg));
         }
- 
+
         return sb.ToString();
     }
 }

@@ -50,6 +50,10 @@ internal sealed class ClassDataContractSpec : DataContractSpec, IEquatable<Class
     /// </summary>
     public string? ISerializableConstructorAccessorName { get; init; }
 
+    public string? OnSerializingAccessorName { get; init; }
+    public string? OnSerializedAccessorName { get; init; }
+    public string? OnDeserializingAccessorName { get; init; }
+    public string? OnDeserializedAccessorName { get; init; }
 
     public bool Equals(ClassDataContractSpec? other)
     {
@@ -72,7 +76,11 @@ internal sealed class ClassDataContractSpec : DataContractSpec, IEquatable<Class
             ConstructorAccessorName == other.ConstructorAccessorName &&
             HasFactoryMethod == other.HasFactoryMethod &&
             HasDeserializationCallback == other.HasDeserializationCallback &&
-            ISerializableConstructorAccessorName == other.ISerializableConstructorAccessorName;
+            ISerializableConstructorAccessorName == other.ISerializableConstructorAccessorName &&
+            OnSerializingAccessorName == other.OnSerializingAccessorName &&
+            OnSerializedAccessorName == other.OnSerializedAccessorName &&
+            OnDeserializingAccessorName == other.OnDeserializingAccessorName &&
+            OnDeserializedAccessorName == other.OnDeserializedAccessorName;
     }
 
     public override bool Equals(DataContractSpec? other) => Equals(other as ClassDataContractSpec);
@@ -99,6 +107,10 @@ internal sealed class ClassDataContractSpec : DataContractSpec, IEquatable<Class
             hashCode = (hashCode * 397) ^ HasFactoryMethod.GetHashCode();
             hashCode = (hashCode * 397) ^ HasDeserializationCallback.GetHashCode();
             hashCode = (hashCode * 397) ^ (ISerializableConstructorAccessorName?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (OnSerializingAccessorName?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (OnSerializedAccessorName?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (OnDeserializingAccessorName?.GetHashCode() ?? 0);
+            hashCode = (hashCode * 397) ^ (OnDeserializedAccessorName?.GetHashCode() ?? 0);
             return hashCode;
         }
     }

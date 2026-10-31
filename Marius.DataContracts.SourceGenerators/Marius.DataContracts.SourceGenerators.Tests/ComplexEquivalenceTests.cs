@@ -21,7 +21,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task Inheritance_WithKnownType_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -54,7 +55,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.DogContract
             {
                 Name = "Buddy",
@@ -78,7 +80,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task DifferentNamesAndNamespaces_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -98,7 +101,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.Internal.InternalPersonContract
             {
                 FullName = "Jane Smith",
@@ -122,7 +126,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task StructContract_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -152,7 +157,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.LineContract
             {
                 Start = new TestContracts.PointContract { X = 1.0, Y = 2.0, Z = 3.0 },
@@ -172,10 +178,11 @@ public class ComplexEquivalenceTests
     /// <summary>
     /// Tests IsReference for preserving object references.
     /// </summary>
-    [Fact(Skip = "Need to pass preserve object references to DataContractSerializers")]
+    [Fact]
     public async Task IsReference_PreservesReferences_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -198,7 +205,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var root = new TestContracts.NodeContract { Id = "root" };
             var left = new TestContracts.NodeContract { Id = "left", Parent = root };
             var right = new TestContracts.NodeContract { Id = "right", Parent = root };
@@ -221,7 +229,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task GetOnlyCollection_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -241,7 +250,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.TeamContract { Name = "Dev Team" };
             original.Members.Add("Alice");
             original.Members.Add("Bob");
@@ -260,10 +270,11 @@ public class ComplexEquivalenceTests
     /// <summary>
     /// Tests serialization callbacks (OnDeserializing, OnDeserialized, OnSerializing, OnSerialized).
     /// </summary>
-    [Fact(Skip = "On(De)Serializ(ing|ed) is not implemneted")]
+    [Fact]
     public async Task SerializationCallbacks_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -304,14 +315,34 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.CallbackTestContract
             {
                 Value = "Test",
                 Counter = 0
             };
 
-            return SerializationTestRunner.RunTest(original, typeof(TestContracts.CallbackTestContract));
+            var custom = new TestContracts.CallbackTestContract { Value = "Test", Counter = 0 };
+            using var netStream = new MemoryStream();
+            using var customStream = new MemoryStream();
+            var netSerializer = new System.Runtime.Serialization.DataContractSerializer(typeof(TestContracts.CallbackTestContract));
+            var customSerializer = new Marius.DataContracts.Runtime.DataContractSerializer(Marius.DataContracts.Runtime.DataContractContext.DataContractProvider, typeof(TestContracts.CallbackTestContract));
+            netSerializer.WriteObject(netStream, original);
+            customSerializer.WriteObject(customStream, custom);
+            
+            if (original.Counter != 2 || custom.Counter != 2)
+                throw new Exception("Callbacks must mutate original objects");
+            if (!netStream.ToArray().SequenceEqual(customStream.ToArray()))
+                throw new Exception("Callback XML differs");
+
+            netStream.Position = 0; customStream.Position = 0;
+            var netRead = (TestContracts.CallbackTestContract)netSerializer.ReadObject(netStream)!;
+            var customRead = (TestContracts.CallbackTestContract)customSerializer.ReadObject(customStream)!;
+
+            if (netRead.Counter != 2 || customRead.Counter != 2)
+                throw new Exception("Read callback/member ordering differs");
+            return new SerializationTestResultData { Success = true, XmlEquivalent = true, DeserializedEqual = true };
             """;
 
         var result = await RunSerializationTest(dataContractCode, testCode);
@@ -326,7 +357,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task SerializableAttribute_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
 
             namespace TestContracts;
@@ -346,7 +378,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.LegacyPerson
             {
                 FirstName = "John",
@@ -370,7 +403,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task ISerializable_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -407,7 +441,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.CustomSerializable
             {
                 Data = "Test Data",
@@ -431,7 +466,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task IXmlSerializable_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Xml;
             using System.Xml.Schema;
@@ -468,7 +504,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.XmlSerializableData
             {
                 Name = "Test",
@@ -491,7 +528,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task DeepInheritanceHierarchy_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -529,7 +567,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.Level3Contract
             {
                 BaseValue = "Base",
@@ -554,7 +593,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task NullableStruct_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -585,7 +625,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.LocationContract
             {
                 Name = "Route",
@@ -611,10 +652,11 @@ public class ComplexEquivalenceTests
     /// <summary>
     /// Tests circular references with multiple objects.
     /// </summary>
-    [Fact(Skip = "Need to pass preserve object references to DataContractSerializers")]
+    [Fact]
     public async Task CircularReferences_WithMultipleObjects_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -632,7 +674,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var alice = new TestContracts.PersonWithFriendsContract { Name = "Alice" };
             var bob = new TestContracts.PersonWithFriendsContract { Name = "Bob" };
             var charlie = new TestContracts.PersonWithFriendsContract { Name = "Charlie" };
@@ -660,7 +703,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task PolymorphicCollection_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -715,7 +759,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.CanvasContract
             {
                 Title = "My Canvas",
@@ -743,7 +788,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task PrivateSetters_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -778,7 +824,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ImmutableContract("ID-123", new DateTime(2024, 6, 15), "secret-value");
 
             return SerializationTestRunner.RunTest(original, typeof(TestContracts.ImmutableContract));
@@ -797,7 +844,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task NestedCollections_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -818,7 +866,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.MatrixContract
             {
                 Name = "TestMatrix",
@@ -851,7 +900,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task CollectionDataContract_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -877,7 +927,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.DocumentContract
             {
                 Title = "Important Document",
@@ -900,7 +951,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task EnumWithCustomValues_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -936,7 +988,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.TaskContract
             {
                 Description = "Fix critical bug",
@@ -960,7 +1013,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task AlphabeticalOrdering_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -983,7 +1037,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.AlphabeticalContract
             {
                 Zebra = "Last",
@@ -1008,7 +1063,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task IsRequired_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1028,7 +1084,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.RequiredContract
             {
                 MandatoryField = "Required Value",
@@ -1052,7 +1109,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task ReadonlyField_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1080,7 +1138,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ReadonlyFieldContract("readonly-123", "Test Name");
 
             return SerializationTestRunner.RunTest(original, typeof(TestContracts.ReadonlyFieldContract));
@@ -1099,7 +1158,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task SelfReferencing_TreeStructure_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1117,7 +1177,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.TreeNodeContract
             {
                 Value = "Root",
@@ -1152,7 +1213,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task DictionaryWithComplexValue_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1177,7 +1239,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.AddressBookContract
             {
                 Addresses = new Dictionary<string, TestContracts.AddressContract>
@@ -1203,7 +1266,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task EmptyCollections_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1224,7 +1288,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.EmptyCollectionContract();
 
             return SerializationTestRunner.RunTest(original, typeof(TestContracts.EmptyCollectionContract));
@@ -1243,7 +1308,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task FlagsEnum_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1280,7 +1346,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.UserContract
             {
                 Username = "admin",
@@ -1300,10 +1367,11 @@ public class ComplexEquivalenceTests
     /// <summary>
     /// Tests DateTimeOffset serialization.
     /// </summary>
-    [Fact(Skip = "DateTimeOffset adapter is not implemented")]
+    [Fact]
     public async Task DateTimeOffset_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1323,7 +1391,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.EventWithOffsetContract
             {
                 Name = "Conference",
@@ -1347,7 +1416,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task Uri_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1367,7 +1437,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.WebResourceContract
             {
                 Title = "Example Site",
@@ -1391,7 +1462,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task ObjectArrayWithMixedTypes_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1409,7 +1481,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.MixedContainerContract
             {
                 Values = new object?[] { "Hello", 42, true, 99.99m, null }
@@ -1431,7 +1504,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task XmlElement_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
             using System.Xml;
@@ -1449,7 +1523,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var doc = new XmlDocument();
             doc.LoadXml("<root><child attr='value'>Text</child></root>");
             
@@ -1475,7 +1550,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task HashSet_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1496,7 +1572,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.TagContainerContract
             {
                 Name = "Tagged Item",
@@ -1520,7 +1597,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task DataMemberOnFields_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1546,7 +1624,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.FieldBasedContract
             {
                 PublicField = "Public",
@@ -1570,7 +1649,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task NestedGenerics_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1595,7 +1675,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ContainerContract
             {
                 Nested = new TestContracts.WrapperContract<TestContracts.WrapperContract<int>>
@@ -1625,7 +1706,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task ImplicitDataContract_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
 
             namespace TestContracts;
@@ -1642,7 +1724,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.SimplePoco
             {
                 Name = "John Doe",
@@ -1666,7 +1749,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task DataContractWithNonDataContractBase_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1689,7 +1773,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.DerivedContract
             {
                 BaseProperty = "Base Value",
@@ -1713,7 +1798,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task AbstractBaseClass_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1749,7 +1835,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.CarContract
             {
                 Make = "Toyota",
@@ -1774,7 +1861,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task SealedClass_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1791,7 +1879,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.SealedContract
             {
                 Id = "sealed-001",
@@ -1814,7 +1903,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task MultipleNamespaces_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1847,7 +1937,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ModuleB.CompanyContract
             {
                 Name = "Acme Corp",
@@ -1874,7 +1965,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task NestedTypes_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1898,7 +1990,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.OuterContract
             {
                 OuterValue = "Outer",
@@ -1924,7 +2017,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task PrivateConstructor_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -1948,7 +2042,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = TestContracts.PrivateConstructorContract.Create("id-001", "Test Value");
 
             return SerializationTestRunner.RunTest(original, typeof(TestContracts.PrivateConstructorContract));
@@ -1967,7 +2062,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task LinkedList_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -1982,7 +2078,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.LinkedListContract();
             original.Items.AddLast("First");
             original.Items.AddLast("Second");
@@ -2004,7 +2101,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task SortedCollections_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -2022,7 +2120,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.SortedContainerContract
             {
                 SortedDict = new SortedDictionary<string, int>
@@ -2055,7 +2154,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task IgnoreDataMember_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2075,7 +2175,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.IgnoreDataMemberContract
             {
                 IncludedProperty = "Included",
@@ -2098,7 +2199,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task InterfacePolymorphism_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -2140,7 +2242,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ChatContract
             {
                 Title = "Test Chat",
@@ -2167,7 +2270,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task MixedOrdering_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2193,7 +2297,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.MixedOrderContract
             {
                 ExplicitlyLast = "Last",
@@ -2219,7 +2324,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task SpecialXmlCharacters_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2245,7 +2351,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.XmlCharsContract
             {
                 Ampersand = "Tom & Jerry",
@@ -2271,7 +2378,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task UnicodeStrings_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2297,7 +2405,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.UnicodeContract
             {
                 Japanese = "こんにちは",
@@ -2323,7 +2432,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task ExtremeNumericValues_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2361,7 +2471,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.ExtremeNumericContract
             {
                 IntMin = int.MinValue,
@@ -2391,7 +2502,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task NullCollections_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Collections.Generic;
             using System.Runtime.Serialization;
@@ -2412,7 +2524,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.NullCollectionsContract
             {
                 NullableList = null,
@@ -2436,7 +2549,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task RecordType_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2456,7 +2570,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.PersonRecordContract
             {
                 FirstName = "John",
@@ -2480,7 +2595,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task RecordStruct_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2507,7 +2623,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.LineRecordContract
             {
                 Start = new TestContracts.PointRecordContract { X = 1.0, Y = 2.0 },
@@ -2530,7 +2647,8 @@ public class ComplexEquivalenceTests
     [Fact]
     public async Task InitOnlyProperties_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2550,7 +2668,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.InitOnlyContract
             {
                 Id = "init-001",
@@ -2567,15 +2686,16 @@ public class ComplexEquivalenceTests
         Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
         Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
     }
-    
-    
+
+
     /// <summary>
     /// Tests generic type contract.
     /// </summary>
     [Fact]
     public async Task GenericType_SerializesEquivalently()
     {
-        var dataContractCode = """
+        var dataContractCode =
+            """
             using System;
             using System.Runtime.Serialization;
 
@@ -2612,7 +2732,8 @@ public class ComplexEquivalenceTests
             }
             """;
 
-        var testCode = """
+        var testCode =
+            """
             var original = new TestContracts.GenericContract<int>
             {
                 Id = 5554,
@@ -2629,5 +2750,4 @@ public class ComplexEquivalenceTests
         Assert.True(result.XmlEquivalent, "Serialized XMLs should be semantically equivalent");
         Assert.True(result.DeserializedEqual, "Deserialized objects should be equal to originals");
     }
-
 }

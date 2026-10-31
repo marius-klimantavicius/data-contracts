@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace Marius.DataContracts.SourceGenerators.Generators;
 
-internal class PrivateAccessorSpecGenerator
+internal static class PrivateAccessorSpecGenerator
 {
     public static void GeneratePrivateAccessors(CodeWriter writer, DataContractSetSpec contractSet)
     {
@@ -122,7 +122,7 @@ internal class PrivateAccessorSpecGenerator
                 else
                     sb.Append(", ");
 
-                sb.Append(item.Name);
+                sb.Append(CSharpIdentifier.Escape(item.Name));
             }
 
             sb.Append('>');
@@ -159,7 +159,7 @@ internal class PrivateAccessorSpecGenerator
                     ParameterRefKind.In => "in ",
                     _ => "",
                 };
-                return $"{modifier}{p.Type.FullyQualifiedName} {p.Name}";
+                return $"{modifier}{p.Type.FullyQualifiedName} {CSharpIdentifier.Escape(p.Name)}";
             }));
             callArgs = string.Join(", ", accessor.Parameters.AsArray().Select(p =>
             {
@@ -170,7 +170,7 @@ internal class PrivateAccessorSpecGenerator
                     ParameterRefKind.In => "in ",
                     _ => "",
                 };
-                return $"{modifier}{p.Name}";
+                return $"{modifier}{CSharpIdentifier.Escape(p.Name)}";
             }));
         }
 
@@ -225,7 +225,7 @@ internal class PrivateAccessorSpecGenerator
         }
         else
         {
-            var typeParamList = "<" + string.Join(", ", typeParams.Select(tp => tp.Name)) + ">";
+            var typeParamList = "<" + string.Join(", ", typeParams.Select(tp => CSharpIdentifier.Escape(tp.Name))) + ">";
             var constraints = GenerateConstraintsClauses(typeParams);
             writer.AppendLine($"private static class {baseName}{typeParamList}{constraints}");
         }
@@ -263,7 +263,7 @@ internal class PrivateAccessorSpecGenerator
             var hasConstraint = false;
 
             constraints.Append("where ");
-            constraints.Append(tp.Name);
+            constraints.Append(CSharpIdentifier.Escape(tp.Name));
             constraints.Append(" : ");
 
             // Special constraints must come in specific order: class/struct/unmanaged first, then types, then new()
@@ -278,8 +278,8 @@ internal class PrivateAccessorSpecGenerator
                 Append(ref constraints, "notnull", ref hasConstraint);
 
             // Type constraints
-            foreach (var c in tp.Constraints) 
-                Append(ref constraints, c.ConstraintTypeFullName!, ref hasConstraint);
+            foreach (var c in tp.Constraints)
+                Append(ref constraints, c.Kind == TypeConstraintKind.TypeParameter ? CSharpIdentifier.Escape(c.ConstraintTypeFullName!) : c.ConstraintTypeFullName!, ref hasConstraint);
 
             // new() must come last
             if (tp.HasConstructorConstraint && !tp.HasValueTypeConstraint && !tp.HasUnmanagedConstraint)
@@ -322,7 +322,7 @@ internal class PrivateAccessorSpecGenerator
                     ParameterRefKind.In => "in ",
                     _ => "",
                 };
-                return $"{modifier}{p.Type.FullyQualifiedName} {p.Name}";
+                return $"{modifier}{p.Type.FullyQualifiedName} {CSharpIdentifier.Escape(p.Name)}";
             }));
         }
 

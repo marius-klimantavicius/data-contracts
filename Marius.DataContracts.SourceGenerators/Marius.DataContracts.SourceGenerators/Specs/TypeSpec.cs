@@ -9,6 +9,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
     public required string Name { get; init; }
     public required string Namespace { get; init; }
     public required bool IsValueType { get; init; }
+    public required bool IsPubliclyAccessible { get; init; }
     public required bool IsNullableValueType { get; init; }
     public required bool IsGenericType { get; init; }
     public required bool IsOpenGenericType { get; init; }
@@ -33,6 +34,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
 
         return FullyQualifiedName == other.FullyQualifiedName &&
             IsValueType == other.IsValueType &&
+            IsPubliclyAccessible == other.IsPubliclyAccessible &&
             IsNullableValueType == other.IsNullableValueType &&
             IsGenericType == other.IsGenericType &&
             IsOpenGenericType == other.IsOpenGenericType &&
@@ -43,7 +45,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
             TypeKind == other.TypeKind &&
             Equals(ElementType, other.ElementType) &&
             TypeParameter == other.TypeParameter &&
-            ConstructedFrom?.Equals(other.ConstructedFrom) == true &&
+            Equals(ConstructedFrom, other.ConstructedFrom) &&
             TypeParameters.Equals(other.TypeParameters) &&
             TypeArguments.Equals(other.TypeArguments);
     }
@@ -56,6 +58,7 @@ internal sealed class TypeSpec : IEquatable<TypeSpec>
         {
             var hashCode = FullyQualifiedName.GetHashCode();
             hashCode = (hashCode * 397) ^ IsValueType.GetHashCode();
+            hashCode = (hashCode * 397) ^ IsPubliclyAccessible.GetHashCode();
             hashCode = (hashCode * 397) ^ IsNullableValueType.GetHashCode();
             hashCode = (hashCode * 397) ^ IsGenericType.GetHashCode();
             hashCode = (hashCode * 397) ^ IsOpenGenericType.GetHashCode();

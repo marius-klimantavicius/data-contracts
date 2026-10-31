@@ -65,7 +65,7 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
 
     public static XmlObjectSerializerReadContext CreateContext(DataContractSerializer serializer, DataContract rootTypeDataContract)
     {
-        return serializer.PreserveObjectReferences
+        return serializer.PreserveObjectReferences || serializer.GetSerializationSurrogateProvider() != null
             ? new XmlObjectSerializerReadContextComplex(serializer, rootTypeDataContract)
             : new XmlObjectSerializerReadContext(serializer, rootTypeDataContract);
     }
@@ -81,10 +81,87 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
         attributes = new Attributes();
     }
 
-    public T? Read<T>(XmlReaderDelegator xmlReader, string name, string ns, DataContract? contract)
+    public virtual T? Read<T>(XmlReaderDelegator xmlReader, string name, string ns, DataContract? contract)
+        => ReadCore<T>(xmlReader, name, ns, contract, attributesRead: false);
+
+    // Generated value readers have just parsed and validated this element's
+    // attributes. This handoff lasts only for this call; direct entries and
+    // custom contexts keep their existing virtual boundaries.
+    public T? ReadWithParsedAttributes<T>(XmlReaderDelegator xmlReader, string name, string ns, DataContract? contract)
     {
-        contract ??= GetDataContract(typeof(T));
-        return (T?)InternalDeserialize(xmlReader, name, ns, typeof(T), ref contract);
+        var contextType = GetType();
+        if (contextType == typeof(XmlObjectSerializerReadContextComplex))
+            return ((XmlObjectSerializerReadContextComplex)this).ReadWithParsedAttributesCore<T>(xmlReader, name, ns, contract);
+
+        if (contextType == typeof(XmlObjectSerializerReadContext))
+            return ReadCore<T>(xmlReader, name, ns, contract, attributesRead: true);
+
+        return Read<T>(xmlReader, name, ns, contract);
+    }
+
+    internal T? ReadCore<T>(XmlReaderDelegator xmlReader, string name, string ns, DataContract? contract, bool attributesRead)
+    {
+        // External contexts may override either object dispatch hook. Only the
+        // built-in contexts can bypass those hooks for a statically typed value.
+        // The complex context calls this method only when no surrogate is active.
+        var contextType = GetType();
+        if (contextType == typeof(XmlObjectSerializerReadContext) || contextType == typeof(XmlObjectSerializerReadContextComplex))
+        {
+            contract ??= attributesRead ? GetDataContractWithParsedAttributes(typeof(T)) : GetDataContract(typeof(T));
+            if (CanReadTyped<T>(contract))
+                return InternalDeserialize<T>(xmlReader, name, ns, typeof(T), ref contract, useTypedReader: true, attributesRead: attributesRead);
+
+            if (attributesRead)
+                return (T?)InternalDeserializeWithParsedAttributes(xmlReader, name, ns, typeof(T), ref contract);
+        }
+
+        return (T?)InternalDeserialize(xmlReader, typeof(T), contract, name, ns);
+    }
+
+    private static bool CanReadTyped<T>(DataContract contract)
+    {
+        // Contract subclasses may override ReadXmlValue, so inheriting a typed
+        // reader is insufficient to opt into bypassing virtual object dispatch.
+        return contract.GetType() == typeof(ClassDataContract<T>) ||
+            contract is ITypedAdapterReader<T> { CanReadTyped: true } ||
+            contract is ITypedEnumContract<T> { CanUseTyped: true };
+    }
+
+    private DataContract GetDataContractWithParsedAttributes(Type declaredType)
+    {
+        var parsedAttributes = attributes!;
+        var savedAttributes = new Attributes.Snapshot(parsedAttributes);
+        try
+        {
+            return GetDataContract(declaredType);
+        }
+        finally
+        {
+            savedAttributes.Restore(parsedAttributes);
+            attributes = parsedAttributes;
+        }
+    }
+
+    private DataContract? ResolveDataContractWithParsedAttributes(string typeName, string? typeNamespace, DataContract memberContract, Type declaredType)
+    {
+        var contextType = GetType();
+        if (contextType != typeof(XmlObjectSerializerReadContext) && contextType != typeof(XmlObjectSerializerReadContextComplex))
+            return ResolveDataContractFromKnownTypes(typeName, typeNamespace, memberContract, declaredType);
+
+        // Name resolution can invoke providers during built-in lookup, serializer
+        // known-type initialization, or root collection fallback. A nested read
+        // may mutate or replace attributes before the parsed reader receives them.
+        var parsedAttributes = attributes!;
+        var savedAttributes = new Attributes.Snapshot(parsedAttributes);
+        try
+        {
+            return ResolveDataContractFromKnownTypes(typeName, typeNamespace, memberContract, declaredType);
+        }
+        finally
+        {
+            savedAttributes.Restore(parsedAttributes);
+            attributes = parsedAttributes;
+        }
     }
 
     public virtual object? InternalDeserialize(XmlReaderDelegator xmlReader, Type declaredType, string? name, string? ns)
@@ -100,8 +177,14 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
     }
 
     protected bool TryHandleNullOrRef(XmlReaderDelegator reader, string? name, string? ns, Type declaredType, ref object? retObj)
+        => TryHandleNullOrRef(reader, name, ns, declaredType, ref retObj, attributesRead: false);
+
+    private bool TryHandleNullOrRef(XmlReaderDelegator reader, string? name, string? ns, Type declaredType, ref object? retObj, bool attributesRead)
     {
-        ReadAttributes(reader);
+        if (!attributesRead)
+            ReadAttributes(reader);
+
+        Debug.Assert(attributes != null);
 
         if (attributes.Ref != Globals.NewObjectId)
         {
@@ -125,10 +208,16 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
     }
 
     protected object? InternalDeserialize(XmlReaderDelegator reader, string? name, string? ns, Type declaredType, ref DataContract dataContract)
+        => InternalDeserialize<object?>(reader, name, ns, declaredType, ref dataContract, useTypedReader: false);
+
+    internal object? InternalDeserializeWithParsedAttributes(XmlReaderDelegator reader, string? name, string? ns, Type declaredType, ref DataContract dataContract)
+        => InternalDeserialize<object?>(reader, name, ns, declaredType, ref dataContract, useTypedReader: false, attributesRead: true);
+
+    private T? InternalDeserialize<T>(XmlReaderDelegator reader, string? name, string? ns, Type declaredType, ref DataContract dataContract, bool useTypedReader, bool attributesRead = false)
     {
         object? retObj = null;
-        if (TryHandleNullOrRef(reader, name, ns, dataContract.UnderlyingType, ref retObj))
-            return retObj;
+        if (TryHandleNullOrRef(reader, name, ns, dataContract.UnderlyingType, ref retObj, attributesRead))
+            return (T?)retObj;
 
         var knownTypesAddedInCurrentScope = false;
         if (dataContract.KnownDataContracts.Count > 0)
@@ -141,7 +230,7 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
 
         if (attributes.XsiTypeName != null)
         {
-            var tempDataContract = ResolveDataContractFromKnownTypes(attributes.XsiTypeName, attributes.XsiTypeNamespace, dataContract, declaredType);
+            var tempDataContract = ResolveDataContractWithParsedAttributes(attributes.XsiTypeName, attributes.XsiTypeNamespace, dataContract, declaredType);
 
             dataContract = tempDataContract ?? throw XmlObjectSerializer.CreateSerializationException(XmlObjectSerializer.TryAddLineInfo(reader, SR.Format(SR.DcTypeNotResolvedOnDeserialize, attributes.XsiTypeNamespace, attributes.XsiTypeName, reader.NamespaceURI, reader.LocalName)));
             knownTypesAddedInCurrentScope = ReplaceScopedKnownTypesTop(dataContract.KnownDataContracts, knownTypesAddedInCurrentScope);
@@ -149,7 +238,7 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
 
         if (dataContract.IsISerializable && attributes.FactoryTypeName != null)
         {
-            var factoryDataContract = ResolveDataContractFromKnownTypes(attributes.FactoryTypeName, attributes.FactoryTypeNamespace, dataContract, declaredType);
+            var factoryDataContract = ResolveDataContractWithParsedAttributes(attributes.FactoryTypeName, attributes.FactoryTypeNamespace, dataContract, declaredType);
             if (factoryDataContract != null)
             {
                 if (factoryDataContract.IsISerializable)
@@ -166,12 +255,37 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
 
         if (knownTypesAddedInCurrentScope)
         {
-            var obj = ReadDataContractValue(dataContract, reader);
+            var obj = ReadDataContractValue<T>(dataContract, reader, useTypedReader);
             ScopedKnownTypes.Pop();
             return obj;
         }
 
-        return ReadDataContractValue(dataContract, reader);
+        return ReadDataContractValue<T>(dataContract, reader, useTypedReader);
+    }
+
+    private T? ReadDataContractValue<T>(DataContract dataContract, XmlReaderDelegator reader, bool useTypedReader)
+    {
+        // Resolve xsi:type and factory metadata before deciding whether the
+        // resulting contract still supports this typed result. Polymorphic and
+        // custom contracts retain the existing virtual object bridge.
+        if (useTypedReader && CanReadTyped<T>(dataContract))
+        {
+            // An adapter can use the same CLR type for its wire and value.
+            // Prefer conversion over its inherited raw wire reader in that case.
+            if (dataContract is ITypedAdapterReader<T> adapter)
+                return adapter.ReadXmlValueTyped(reader, this, attributesRead: true);
+
+            if (dataContract is ITypedEnumContract<T> enumContract)
+                return enumContract.ReadXmlValueTyped(reader, this);
+
+            return ((ClassDataContract<T>)dataContract).ReadXmlValueTyped(reader, this, attributesRead: true);
+        }
+
+        var contextType = GetType();
+        if (contextType == typeof(XmlObjectSerializerReadContext) || contextType == typeof(XmlObjectSerializerReadContextComplex))
+            return (T?)dataContract.ReadXmlValueWithParsedAttributes(reader, this);
+
+        return (T?)ReadDataContractValue(dataContract, reader);
     }
 
     private bool ReplaceScopedKnownTypesTop(DataContractDictionary? knownDataContracts, bool knownTypesAddedInCurrentScope)
@@ -906,8 +1020,10 @@ public class XmlObjectSerializerReadContext : XmlObjectSerializerContext
         return dataNode;
     }
 
-    private IDataNode ReadAndResolveUnknownXmlData(XmlReaderDelegator xmlReader, IDictionary<string, string>? namespaces,
-        string? dataContractName, string? dataContractNamespace)
+    private IDataNode ReadAndResolveUnknownXmlData(XmlReaderDelegator xmlReader,
+        IDictionary<string, string>? namespaces,
+        string? dataContractName,
+        string? dataContractNamespace)
     {
         var couldBeISerializableData = true;
         var couldBeCollectionData = true;

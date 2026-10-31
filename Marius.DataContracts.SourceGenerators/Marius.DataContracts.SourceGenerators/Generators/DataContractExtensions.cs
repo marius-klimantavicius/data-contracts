@@ -22,25 +22,19 @@ internal static class DataContractExtensions
     public static List<ITypeSymbol>? GetAllTypeArgumentsInScope(this INamedTypeSymbol type)
     {
         if (!type.IsGenericType)
-        {
             return null;
-        }
  
         List<ITypeSymbol>? args = null;
-        TraverseContainingTypes(type);
+        TraverseContainingTypes(type, ref args);
         return args;
  
-        void TraverseContainingTypes(INamedTypeSymbol current)
+        static void TraverseContainingTypes(INamedTypeSymbol current, ref List<ITypeSymbol>? args)
         {
             if (current.ContainingType is INamedTypeSymbol parent)
-            {
-                TraverseContainingTypes(parent);
-            }
+                TraverseContainingTypes(parent, ref args);
  
             if (!current.TypeArguments.IsEmpty)
-            {
-                (args ??= new()).AddRange(current.TypeArguments);
-            }
+                (args ??= new List<ITypeSymbol>()).AddRange(current.TypeArguments);
         }
     }
 }

@@ -10,18 +10,21 @@ public class CodeWriter
     private string _indentValue = "";
 
     private readonly HashSet<string> _fileNames;
+    private readonly HashSet<string> _names;
 
     public CodeWriter? Parent { get; }
-    
+
     public CodeWriter()
     {
-        _fileNames = new HashSet<string>();
+        _fileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        _names = new HashSet<string>(StringComparer.Ordinal);
     }
 
     public CodeWriter(CodeWriter parent)
     {
         Parent = parent;
         _fileNames = parent._fileNames;
+        _names = parent._names;
     }
 
     public IndentDisposable Indent()
@@ -72,19 +75,27 @@ public class CodeWriter
 
     public string LocalName(string prefix)
     {
-        if (Parent != null)
-            return $"{prefix}{Parent._nameIndex++}";
+        var owner = Parent ?? this;
+        string name;
+        do
+        {
+            name = $"{prefix}{owner._nameIndex++}";
+        } while (!_names.Add(name));
 
-        return $"{prefix}{_nameIndex++}";
+        return name;
+    }
+
+    public void ReserveNames(IEnumerable<string> names)
+    {
+        foreach (var name in names)
+            _names.Add(name);
     }
 
     public string FileName(string hintName)
     {
-        if (!_fileNames.Add(hintName))
-        {
-            hintName = LocalName(hintName);
-            _fileNames.Add(hintName);
-        }
+        var prefix = hintName;
+        while (!_fileNames.Add(hintName))
+            hintName = LocalName(prefix);
 
         return hintName;
     }

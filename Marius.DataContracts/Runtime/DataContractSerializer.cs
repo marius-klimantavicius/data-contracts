@@ -21,6 +21,21 @@ public sealed class DataContractSerializer : XmlObjectSerializer
     internal IList<Type>? _knownTypeList;
     internal DataContractDictionary? _knownDataContracts;
     private IDataContractProvider _dataContractProvider;
+    private ISerializationSurrogateProvider? _serializationSurrogateProvider;
+
+    /// <summary>Gets the runtime surrogate provider, if one has been configured.</summary>
+    public ISerializationSurrogateProvider? GetSerializationSurrogateProvider() => _serializationSurrogateProvider;
+
+    /// <summary>
+    /// Sets the runtime surrogate provider. Source and replacement contracts must
+    /// already be generated. As with the framework serializer, configure the provider
+    /// before the first operation that resolves the cached root contract.
+    /// </summary>
+    public void SetSerializationSurrogateProvider(ISerializationSurrogateProvider? provider) => _serializationSurrogateProvider = provider;
+
+    internal SerializationSurrogate? CreateSurrogate() => _serializationSurrogateProvider == null
+        ? null
+        : new SerializationSurrogate(DataContractProvider, _serializationSurrogateProvider);
 
     internal static UTF8Encoding UTF8NoBom { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
     internal static UTF8Encoding ValidatingUTF8 { get; } = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
@@ -73,6 +88,9 @@ public sealed class DataContractSerializer : XmlObjectSerializer
     public DataContractSerializer(IDataContractProvider dataContractProvider, Type type, DataContractSerializerSettings? settings)
     {
         settings ??= new DataContractSerializerSettings();
+        if (settings.DataContractResolver != null)
+            throw new NotSupportedException("Custom DataContractResolver settings are not supported by the generated serializer.");
+
         Initialize(dataContractProvider, type, settings.RootName, settings.RootNamespace, settings.KnownTypes, settings.MaxItemsInObjectGraph, settings.IgnoreExtensionDataObject, settings.PreserveObjectReferences, settings.SerializeReadOnlyTypes);
     }
 
@@ -96,7 +114,7 @@ public sealed class DataContractSerializer : XmlObjectSerializer
         if (knownTypes != null)
         {
             _knownTypeList = new List<Type>();
-            foreach (var knownType in knownTypes) 
+            foreach (var knownType in knownTypes)
                 _knownTypeList.Add(knownType);
         }
 
@@ -167,7 +185,10 @@ public sealed class DataContractSerializer : XmlObjectSerializer
         {
             if (_rootContract == null)
             {
-                _rootContract = DataContractProvider.GetDataContract(_rootType);
+                var surrogate = CreateSurrogate();
+                _rootContract = surrogate == null
+                    ? DataContractProvider.GetDataContract(_rootType)
+                    : surrogate.GetGeneratedContract(surrogate.GetSurrogatedType(_rootType));
                 _needsContractNsAtRoot = CheckIfNeedsContractNsAtRoot(_rootName, _rootNamespace, _rootContract);
             }
 
@@ -261,6 +282,9 @@ public sealed class DataContractSerializer : XmlObjectSerializer
         var declaredType = contract.UnderlyingType;
         var graphType = graph == null ? declaredType : graph.GetType();
 
+        var surrogate = CreateSurrogate();
+        if (surrogate != null)
+            graph = surrogate.GetObjectToSerialize(graph, declaredType, ref graphType);
 
         if (graph == null)
         {
@@ -292,7 +316,7 @@ public sealed class DataContractSerializer : XmlObjectSerializer
                 contract = GetDataContract(contract, declaredType, graphType);
 
                 var context = XmlObjectSerializerWriteContext.CreateContext(this, RootContract);
-                if (contract.CanContainReferences) 
+                if (contract.CanContainReferences)
                     context.HandleGraphAtTopLevel(writer, graph, contract);
 
                 context.OnHandleIsReference(writer, contract, graph);
@@ -314,7 +338,7 @@ public sealed class DataContractSerializer : XmlObjectSerializer
 
     internal override void InternalWriteEndObject(XmlWriterDelegator writer)
     {
-        if (!IsRootXmlAny(_rootName, RootContract)) 
+        if (!IsRootXmlAny(_rootName, RootContract))
             writer.WriteEndElement();
     }
 

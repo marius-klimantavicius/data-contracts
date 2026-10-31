@@ -77,10 +77,15 @@ public abstract partial class DataContract
             XmlName = new XmlQualifiedName(name, ns);
         }
         
-        private static ITypeSymbol GetDataContractOriginalType(ITypeSymbol type)
+        private ITypeSymbol GetDataContractOriginalType(ITypeSymbol type)
         {
-            // adapters not supported
-            return type;
+            var originalName = type.ToDisplayString() switch
+            {
+                "Marius.DataContracts.Runtime.Adapters.DateTimeOffsetAdapter" => "System.DateTimeOffset",
+                "Marius.DataContracts.Runtime.Adapters.MemoryStreamAdapter" => "System.IO.MemoryStream",
+                _ => null,
+            };
+            return originalName == null ? type : Context.KnownSymbols.Compilation.GetTypeByMetadataName(originalName)!;
         }
     }
 }

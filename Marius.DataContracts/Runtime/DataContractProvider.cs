@@ -19,9 +19,9 @@ public class DataContractProvider : IDataContractProvider
         for (var i = 0; i < _dataContracts.Length; i++)
         {
             var item = _dataContracts[i];
-            if (item == null)
+            if (item is not PrimitiveDataContract)
                 continue;
-            
+
             if (item.XmlName.Name == name && item.XmlName.Namespace == ns)
                 return item;
         }
@@ -31,7 +31,19 @@ public class DataContractProvider : IDataContractProvider
 
     public DataContract? GetPrimitiveDataContract(Type type)
     {
-        return _typeDataContracts.GetValueOrDefault(type);
+        return _typeDataContracts.GetValueOrDefault(type) as PrimitiveDataContract;
+    }
+
+    public DataContract? GetBuiltInDataContract(string name, string ns)
+    {
+        for (var i = 0; i < _dataContracts.Length; i++)
+        {
+            var item = _dataContracts[i];
+            if (item is { IsBuiltInDataContract: true } && item.XmlName.Name == name && item.XmlName.Namespace == ns)
+                return item;
+        }
+
+        return null;
     }
 
     public bool TryGetDataContract(Type type, [NotNullWhen(true)] out DataContract? dataContract)

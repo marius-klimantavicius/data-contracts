@@ -199,7 +199,18 @@ internal partial class DataContractContext
     private DataContract CreateDataContract(ITypeSymbol type)
     {
         type = UnwrapNullableType(type);
+
         var originalType = type;
+        var adapterName = type.WithNullableAnnotation(NullableAnnotation.None).ToDisplayString() switch
+        {
+            "System.DateTimeOffset" => "Marius.DataContracts.Runtime.Adapters.DateTimeOffsetAdapter",
+            "System.IO.MemoryStream" => "Marius.DataContracts.Runtime.Adapters.MemoryStreamAdapter",
+            _ => null,
+        };
+
+        if (adapterName != null)
+            type = KnownSymbols.Compilation.GetTypeByMetadataName(adapterName) ?? throw new InvalidDataContractException($"Missing runtime adapter '{adapterName}'.");
+
         var dataContract = GetBuiltInDataContract(type);
         if (dataContract == null)
         {
@@ -230,10 +241,10 @@ internal partial class DataContractContext
                         ThrowInvalidDataContractException(SR.Format(SR.TypeNotSerializable, type.ToDisplayString()));
 
                     dataContract = new ClassDataContract(this, type);
-                    if (!SymbolEqualityComparer.Default.Equals(type, originalType))
+                    if (adapterName == null && !SymbolEqualityComparer.Default.Equals(type, originalType))
                     {
                         var originalDataContract = new ClassDataContract(this, originalType);
-                        if (dataContract.XmlName != originalDataContract.XmlName) // for non-DC types, type adapters will not have the same xml name (contract name).
+                        if (dataContract.XmlName != originalDataContract.XmlName)
                             dataContract.XmlName = originalDataContract.XmlName;
                     }
                 }

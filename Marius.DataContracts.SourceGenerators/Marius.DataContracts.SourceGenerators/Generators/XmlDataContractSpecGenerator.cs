@@ -20,7 +20,7 @@ internal class XmlDataContractSpecGenerator : SpecContractGenerator
 
     public override void DeclareDataContract()
     {
-        AppendLine($"public static global::Marius.DataContracts.Runtime.XmlDataContract<{XmlContract.UnderlyingType.FullyQualifiedName}> {XmlContract.GeneratedName};");
+        AppendLine($"{ContractAccessibility(XmlContract.UnderlyingType)} static global::Marius.DataContracts.Runtime.XmlDataContract<{XmlContract.UnderlyingType.FullyQualifiedName}> {XmlContract.GeneratedName};");
     }
 
     public override (string localName, string? underlyingTypeOverride) GenerateDataContract(SourceProductionContext context, string xmlDictionary)
@@ -59,7 +59,7 @@ internal class XmlDataContractSpecGenerator : SpecContractGenerator
                         if (!string.IsNullOrEmpty(XmlContract.SchemaProviderMethodAccessorName))
                             AppendLine($"var {typeInfo} = PrivateAccessors.{XmlContract.SchemaProviderMethodAccessorName}(default({XmlContract.UnderlyingType.FullyQualifiedName}), {schemas});");
                         else
-                            AppendLine($"var {typeInfo} = {XmlContract.UnderlyingType.FullyQualifiedName}.{XmlContract.SchemaProviderMethod}({schemas});");
+                            AppendLine($"var {typeInfo} = {XmlContract.UnderlyingType.FullyQualifiedName}.{CSharpIdentifier.Escape(XmlContract.SchemaProviderMethod!)}({schemas});");
 
                         if (XmlContract.IsAny)
                         {

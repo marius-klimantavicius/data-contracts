@@ -21,7 +21,7 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
 
     public override void DeclareDataContract()
     {
-        AppendLine($"public static global::Marius.DataContracts.Runtime.CollectionDataContract<{CollectionContract.UnderlyingType.FullyQualifiedName}> {CollectionContract.GeneratedName};");
+        AppendLine($"{ContractAccessibility(CollectionContract.UnderlyingType)} static global::Marius.DataContracts.Runtime.CollectionDataContract<{CollectionContract.UnderlyingType.FullyQualifiedName}> {CollectionContract.GeneratedName};");
     }
 
     public override (string localName, string? underlyingTypeOverride) GenerateDataContract(SourceProductionContext context, string xmlDictionary)
@@ -181,7 +181,7 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
             if (isArray)
             {
                 growingCollection = LocalName("__array");
-                AppendLine($"var {growingCollection} = new {itemType.FullyQualifiedName}[32];");
+                AppendLine($"var {growingCollection} = default({itemType.FullyQualifiedName}[]);");
             }
 
             var iterator = LocalName("__i");
@@ -193,9 +193,14 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
                 using (Block())
                 {
                     AppendLine("context.IncrementItemCount(1);");
+
+                    if (isArray)
+                        AppendLine();
+
                     var value = ReadCollectionItem(itemType, itemName, itemNs);
                     if (isArray)
                     {
+                        AppendLine($"{growingCollection} ??= new {itemType.FullyQualifiedName}[32];");
                         AppendLine($"{growingCollection} = global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.EnsureArraySize<{itemType.FullyQualifiedName}>({growingCollection}, {iterator});");
                         AppendLine($"{growingCollection}[{iterator}] = {value};");
                     }
@@ -221,7 +226,13 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
             if (isArray)
             {
                 AppendLine();
-                AppendLine($"{objectLocal} = global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.TrimArraySize({growingCollection}, {iterator});");
+                AppendLine($"{objectLocal} = {growingCollection} is null");
+                using (Writer.Indent())
+                {
+                    AppendLine($"? new {itemType.FullyQualifiedName}[0]");
+                    AppendLine($": global::Marius.DataContracts.Runtime.XmlObjectSerializerReadContext.TrimArraySize({growingCollection}, {iterator});");
+                }
+
                 AppendLine($"context.AddNewObjectWithId({objectId}, {objectLocal});");
             }
         }
@@ -416,7 +427,7 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
         {
             var itemContract = GetContract(CollectionContract.ItemContractId);
             var value = LocalName("__value");
-            AppendLine($"var {value} = ({itemType.FullyQualifiedName}){itemContract?.GeneratedName}.ReadXmlValue(xmlReader, context);");
+            AppendLine($"var {value} = {itemContract?.GeneratedName}.ReadDictionaryEntry(xmlReader, context);");
             return value;
         }
 
@@ -533,7 +544,11 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
             AppendLine($"foreach (var {item} in obj)");
             using (Block())
             {
-                AppendLine("context.IncrementItemCount(1);");
+                // Collections with Count were charged before the loop. Enumerables
+                // without Count must still charge each item as it is discovered.
+                if (CollectionContract.CollectionKind == CollectionKind.Enumerable || CollectionContract.CollectionKind == CollectionKind.GenericEnumerable)
+                    AppendLine("context.IncrementItemCount(1);");
+
                 WriteStartElement(elementType, CollectionContract.Namespace, null, itemNamespace, itemName, 0);
 
                 var itemContract = GetContract(CollectionContract.ItemContractId)!;
@@ -541,7 +556,7 @@ internal class CollectionDataContractSpecGenerator : SpecContractGenerator
                 {
                     var kv = LocalName("__kv");
                     AppendLine($"var {kv} = global::Marius.DataContracts.Runtime.KeyValue.Create({item}.Key, {item}.Value);");
-                    AppendLine($"{itemContract.GeneratedName}.WriteXmlValue(xmlWriter, {kv}, context);");
+                    AppendLine($"{itemContract.GeneratedName}.WriteDictionaryEntry(xmlWriter, {kv}, context);");
                 }
                 else
                 {

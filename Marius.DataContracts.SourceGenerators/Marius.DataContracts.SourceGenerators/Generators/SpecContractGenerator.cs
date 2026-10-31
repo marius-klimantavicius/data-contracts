@@ -12,7 +12,7 @@ internal abstract class SpecContractGenerator
     private CodeWriter _writer;
 
     protected CodeWriter Writer => _writer;
-    
+
     protected DataContractSetSpec ContractSet { get; }
 
     protected SpecContractGenerator(CodeWriter writer, DataContractSetSpec contractSet)
@@ -37,7 +37,9 @@ internal abstract class SpecContractGenerator
     protected void AppendLine(string value) => _writer.AppendLine(value);
     protected string LocalName(string prefix) => _writer.LocalName(prefix);
 
-    protected string GetMemberValue(string instance, TypeSpec type, MemberSpec memberInfo)
+    protected static string ContractAccessibility(TypeSpec type) => type.IsPubliclyAccessible ? "public" : "internal";
+
+    protected static string GetMemberValue(string instance, TypeSpec type, MemberSpec memberInfo)
     {
         if (memberInfo.Kind == MemberKindSpec.Property)
         {
@@ -50,7 +52,17 @@ internal abstract class SpecContractGenerator
                 return $"PrivateAccessor.{memberInfo.GetterAccessorName}({type.MaybeRef()}{instance})";
         }
 
-        return $"{instance}.{memberInfo.Name}";
+        return GetMemberAccess(instance, type, memberInfo);
+    }
+
+    protected static string GetMemberAccess(string instance, TypeSpec type, MemberSpec memberInfo)
+    {
+        // Bind hidden members to their declaration. A reference cast still uses
+        // virtual dispatch; value types must stay as variables for writes.
+        if (!type.IsValueType && type.FullyQualifiedName != memberInfo.DeclaringType.FullyQualifiedName)
+            instance = $"(({memberInfo.DeclaringType.FullyQualifiedName}){instance})";
+
+        return $"{instance}.{CSharpIdentifier.Escape(memberInfo.Name)}";
     }
 
     protected string ReadValue(TypeSpec type, DataContractSpec? dataContract, string name, string ns, bool isGetOnlyCollection)
@@ -113,7 +125,7 @@ internal abstract class SpecContractGenerator
                     }
                     else
                     {
-                        AppendLine($"{value} = context.Read<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract?.GeneratedName ?? "null"});");
+                        AppendLine($"{value} = context.ReadWithParsedAttributes<{unwrappedType.FullyQualifiedName}>(xmlReader, {SymbolDisplay.FormatLiteral(name, true)}, {SymbolDisplay.FormatLiteral(ns, true)}, {dataContract?.GeneratedName ?? "null"});");
                     }
                 }
 
@@ -162,7 +174,10 @@ internal abstract class SpecContractGenerator
                     AppendLine($"var {memberTypeLocal} = typeof({memberType.FullyQualifiedName}).TypeHandle;");
                 }
 
-                AppendLine($"context.InternalSerialize(xmlWriter, {memberValue}, {memberValue}.GetType().TypeHandle.Equals({memberTypeLocal}), {SymbolDisplay.FormatPrimitive(writeXsiType, true, false)}, {memberTypeLocal});");
+                if (memberContract is ClassDataContractSpec or EnumDataContractSpec && !writeXsiType)
+                    AppendLine($"context.InternalSerializeValue(xmlWriter, {memberValue}, {memberTypeLocal});");
+                else
+                    AppendLine($"context.InternalSerialize(xmlWriter, {memberValue}, {memberValue}.GetType().TypeHandle.Equals({memberTypeLocal}), {SymbolDisplay.FormatPrimitive(writeXsiType, true, false)}, {memberTypeLocal});");
             }
         }
         else
@@ -181,6 +196,8 @@ internal abstract class SpecContractGenerator
                     AppendLine($"var {actualValue} = {memberValue}.GetValueOrDefault();");
                     if (memberContract is PrimitiveDataContractSpec primitiveContract && primitiveContract.UnderlyingType.SpecialType != SpecialTypeKind.Object && !writeXsiType)
                         WritePrimitive(primitiveContract, actualValue);
+                    else if (memberContract is ClassDataContractSpec or EnumDataContractSpec && !writeXsiType)
+                        AppendLine($"context.InternalSerializeValue(xmlWriter, {actualValue}, typeof({elementType.FullyQualifiedName}).TypeHandle);");
                     else
                         AppendLine($"context.InternalSerialize(xmlWriter, {actualValue}, true, {SymbolDisplay.FormatPrimitive(writeXsiType, true, false)}, typeof({elementType.FullyQualifiedName}).TypeHandle);");
                 }
@@ -247,10 +264,11 @@ internal abstract class SpecContractGenerator
 
         return ContractSet.Contracts[id];
     }
-    
-    public struct WriterDisposable: IDisposable
+
+    public readonly struct WriterDisposable : IDisposable
     {
-        private SpecContractGenerator _generator;
+        private readonly SpecContractGenerator _generator;
+
         public WriterDisposable(SpecContractGenerator generator)
         {
             _generator = generator;

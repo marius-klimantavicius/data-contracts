@@ -19,7 +19,7 @@ internal class EnumDataContractSpecGenerator : SpecContractGenerator
 
     public override void DeclareDataContract()
     {
-        AppendLine($"public static global::Marius.DataContracts.Runtime.EnumDataContract<{EnumContract.UnderlyingType.FullyQualifiedName}> {EnumContract.GeneratedName};");
+        AppendLine($"{ContractAccessibility(EnumContract.UnderlyingType)} static global::Marius.DataContracts.Runtime.EnumDataContract<{EnumContract.UnderlyingType.FullyQualifiedName}> {EnumContract.GeneratedName};");
     }
 
     public override (string localName, string? underlyingTypeOverride) GenerateDataContract(SourceProductionContext context, string xmlDictionary)
@@ -96,7 +96,7 @@ internal class EnumDataContractSpecGenerator : SpecContractGenerator
                     }
                 }
             }
-            
+
             context.AddSource($"DataContractContext.{Writer.FileName(EnumContract.TypeInfoPropertyName)}.g.cs", Writer.GetString());
         }
 

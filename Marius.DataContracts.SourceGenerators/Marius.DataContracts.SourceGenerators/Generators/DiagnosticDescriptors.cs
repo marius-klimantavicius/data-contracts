@@ -90,11 +90,11 @@ internal static class DiagnosticDescriptors
     public static DiagnosticDescriptor InvalidReturnTypeOnGetSchemaMethod { get; } = DiagnosticDescriptorHelper.Create(
         id: "DCS1011",
         title: "Invalid return type on GetSchema method",
-        messageFormat: System.SR.InvalidReturnTypeOnGetSchemaMethod,
+        messageFormat: SR.InvalidReturnTypeOnGetSchemaMethod,
         category: SourceGenerationName,
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
-    
+
     public static DiagnosticDescriptor UnexpectedError { get; } = DiagnosticDescriptorHelper.Create(
         id: "DCS1099",
         title: "Unexpected error during source generation",
@@ -209,7 +209,7 @@ internal static class DiagnosticDescriptors
         category: SourceGenerationName,
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
-    
+
     public static DiagnosticDescriptor KnownTypeMethodNotSupported { get; } = DiagnosticDescriptorHelper.Create(
         id: "DCS4006",
         title: "KnownType method name not supported",

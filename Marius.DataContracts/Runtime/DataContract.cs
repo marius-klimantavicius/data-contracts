@@ -59,6 +59,12 @@ public abstract class DataContract
         return null;
     }
 
+    // The context has parsed this element and completed its null/ref/type policy.
+    // Contracts must explicitly opt in; custom virtual readers still enter their
+    // public boundary and obtain fresh attributes after any reentrant work.
+    internal virtual object? ReadXmlValueWithParsedAttributes(XmlReaderDelegator xmlReader, XmlObjectSerializerReadContext context)
+        => ReadXmlValue(xmlReader, context);
+
     public virtual void WriteRootElement(XmlWriterDelegator writer, XmlDictionaryString name, XmlDictionaryString? ns)
     {
         if (ReferenceEquals(ns, DictionaryGlobals.SerializationNamespace) && !IsPrimitive)

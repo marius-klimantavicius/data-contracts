@@ -22,7 +22,7 @@ public class XmlObjectSerializerWriteContext : XmlObjectSerializerContext
 
     public static XmlObjectSerializerWriteContext CreateContext(DataContractSerializer serializer, DataContract rootTypeDataContract)
     {
-        return serializer.PreserveObjectReferences
+        return serializer.PreserveObjectReferences || serializer.GetSerializationSurrogateProvider() != null
             ? new XmlObjectSerializerWriteContextComplex(serializer, rootTypeDataContract)
             : new XmlObjectSerializerWriteContext(serializer, rootTypeDataContract);
     }
@@ -70,6 +70,46 @@ public class XmlObjectSerializerWriteContext : XmlObjectSerializerContext
         if (!OnHandleReference(xmlWriter, obj, true /*canContainCyclicReference*/))
             InternalSerialize(xmlWriter, obj, isDeclaredType, writeXsiType, declaredTypeHandle);
         OnEndHandleReference(xmlWriter, obj, true /*canContainCyclicReference*/);
+    }
+
+    public void InternalSerializeValue<T>(XmlWriterDelegator xmlWriter, T value, RuntimeTypeHandle declaredTypeHandle)
+        where T : struct
+    {
+        // Generated concrete values have no runtime type substitution. Custom
+        // contexts and active surrogates must still enter the virtual object path.
+        var contextType = GetType();
+        if (contextType != typeof(XmlObjectSerializerWriteContext) && (contextType != typeof(XmlObjectSerializerWriteContextComplex) || ((XmlObjectSerializerWriteContextComplex)this).HasSurrogate))
+        {
+            InternalSerialize(xmlWriter, value, true, false, declaredTypeHandle);
+            return;
+        }
+
+        // Resolve exactly once, including for stateful providers. A generated
+        // singleton is not necessarily the provider's current contract choice.
+        var contract = GetDataContract(declaredTypeHandle, null);
+        var adapter = contract as ITypedAdapterWriter<T>;
+        var enumContract = contract as ITypedEnumContract<T>;
+        if (contract.IsReference || (contract.GetType() != typeof(ClassDataContract<T>) && adapter is not { CanWriteTyped: true } && enumContract is not { CanUseTyped: true }))
+        {
+            SerializeWithoutXsiType(contract, xmlWriter, value, declaredTypeHandle);
+            return;
+        }
+
+        var hasKnownTypes = contract.KnownDataContracts.Count > 0;
+        if (hasKnownTypes)
+            ScopedKnownTypes.Push(contract.KnownDataContracts);
+
+        // Pass a snapshot by value: callbacks may mutate their local value,
+        // never the caller's member, array element or collection storage.
+        if (adapter != null)
+            adapter.WriteXmlValueTyped(xmlWriter, value, this);
+        else if (enumContract != null)
+            enumContract.WriteXmlValueTyped(xmlWriter, value);
+        else
+            ((ClassDataContract<T>)contract).Write(xmlWriter, this, value);
+
+        if (hasKnownTypes)
+            ScopedKnownTypes.Pop();
     }
 
     public virtual void InternalSerialize(XmlWriterDelegator xmlWriter, object obj, bool isDeclaredType, bool writeXsiType, RuntimeTypeHandle declaredTypeHandle)

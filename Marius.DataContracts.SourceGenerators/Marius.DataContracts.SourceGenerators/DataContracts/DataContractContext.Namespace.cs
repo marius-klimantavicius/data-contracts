@@ -8,7 +8,7 @@ namespace Marius.DataContracts.SourceGenerators.DataContracts;
 internal partial class DataContractContext
 {
     public const string CollectionsNamespace = "http://schemas.microsoft.com/2003/10/Serialization/Arrays";
-    
+
     private static Uri? _dataContractXsdBaseNamespaceUri;
     internal static Uri DataContractXsdBaseNamespaceUri => _dataContractXsdBaseNamespaceUri ??= new Uri(DataContractXsdBaseNamespace);
 
@@ -82,7 +82,7 @@ internal partial class DataContractContext
         {
             var trimmedNs = dataContractNs.Trim();
             // Code similar to XmlConvert.ToUri (string.Empty is a valid uri but not "   ")
-            if (trimmedNs.Length == 0 || trimmedNs.Contains("##", StringComparison.Ordinal)) 
+            if (trimmedNs.Length == 0 || trimmedNs.Contains("##", StringComparison.Ordinal))
                 ThrowInvalidDataContractException(SR.Format(SR.DataContractNamespaceIsNotValid, dataContractNs));
 
             dataContractNs = trimmedNs;
@@ -91,7 +91,7 @@ internal partial class DataContractContext
         if (Uri.TryCreate(dataContractNs, UriKind.RelativeOrAbsolute, out var uri))
         {
             var formatted = uri.ToString();
-            if (formatted == SerializationNamespace) 
+            if (formatted == SerializationNamespace)
                 ThrowInvalidDataContractException(SR.Format(SR.DataContractNamespaceReserved, SerializationNamespace));
         }
         else
@@ -99,10 +99,16 @@ internal partial class DataContractContext
             ThrowInvalidDataContractException(SR.Format(SR.DataContractNamespaceIsNotValid, dataContractNs));
         }
     }
-    
+
     private static string? GetNamespace(ITypeSymbol type)
     {
-        return type.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted)) is { Length: > 0 } ns ? ns : null;
+        // This namespace is XML/CLR metadata, not C# source. Verbatim identifier
+        // prefixes would change both the wire namespace and ClrNamespace lookup.
+        var ns = type.ContainingNamespace?.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Omitted).WithMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.None));
+        if (ns?.Length > 0)
+            return ns;
+
+        return null;
     }
 
     private static string? GetGlobalDataContractNamespace(string clrNs, ISymbol symbol)
@@ -148,12 +154,12 @@ internal partial class DataContractContext
     {
         return ns == SchemaNamespace || ns == SerializationNamespace;
     }
-    
+
     internal static string GetCollectionNamespace(string elementNs)
     {
         return IsBuiltInNamespace(elementNs) ? CollectionsNamespace : elementNs;
     }
-    
+
     private static string GetNamespacesDigest(string namespaces)
     {
         const int digestLen = 6;

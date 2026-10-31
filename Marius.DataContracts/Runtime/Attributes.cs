@@ -34,6 +34,59 @@ public sealed class Attributes
     internal string? FactoryTypePrefix;
     internal bool UnrecognizedAttributesFound;
 
+    // A parsed element can outlive user-controlled surrogate/contract selection.
+    // Keep its complete state on the stack while a nested read uses this object.
+    internal readonly struct Snapshot
+    {
+        private readonly string _id;
+        private readonly string _ref;
+        private readonly string? _xsiTypeName;
+        private readonly string? _xsiTypeNamespace;
+        private readonly string? _xsiTypePrefix;
+        private readonly bool _xsiNil;
+        private readonly string? _clrAssembly;
+        private readonly string? _clrType;
+        private readonly int _arraySZSize;
+        private readonly string? _factoryTypeName;
+        private readonly string? _factoryTypeNamespace;
+        private readonly string? _factoryTypePrefix;
+        private readonly bool _unrecognizedAttributesFound;
+
+        internal Snapshot(Attributes attributes)
+        {
+            _id = attributes.Id;
+            _ref = attributes.Ref;
+            _xsiTypeName = attributes.XsiTypeName;
+            _xsiTypeNamespace = attributes.XsiTypeNamespace;
+            _xsiTypePrefix = attributes.XsiTypePrefix;
+            _xsiNil = attributes.XsiNil;
+            _clrAssembly = attributes.ClrAssembly;
+            _clrType = attributes.ClrType;
+            _arraySZSize = attributes.ArraySZSize;
+            _factoryTypeName = attributes.FactoryTypeName;
+            _factoryTypeNamespace = attributes.FactoryTypeNamespace;
+            _factoryTypePrefix = attributes.FactoryTypePrefix;
+            _unrecognizedAttributesFound = attributes.UnrecognizedAttributesFound;
+        }
+
+        internal void Restore(Attributes attributes)
+        {
+            attributes.Id = _id;
+            attributes.Ref = _ref;
+            attributes.XsiTypeName = _xsiTypeName;
+            attributes.XsiTypeNamespace = _xsiTypeNamespace;
+            attributes.XsiTypePrefix = _xsiTypePrefix;
+            attributes.XsiNil = _xsiNil;
+            attributes.ClrAssembly = _clrAssembly;
+            attributes.ClrType = _clrType;
+            attributes.ArraySZSize = _arraySZSize;
+            attributes.FactoryTypeName = _factoryTypeName;
+            attributes.FactoryTypeNamespace = _factoryTypeNamespace;
+            attributes.FactoryTypePrefix = _factoryTypePrefix;
+            attributes.UnrecognizedAttributesFound = _unrecognizedAttributesFound;
+        }
+    }
+
     internal void Read(XmlReaderDelegator reader)
     {
         Reset();
